@@ -1,5 +1,5 @@
 // src/components/SeatMap.jsx
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 const SEAT_WIDTH = 8;
@@ -7,6 +7,13 @@ const SEAT_HEIGHT = 7;
 const BACKREST_WIDTH = 6;
 const BACKREST_HEIGHT = 3.5;
 const HOLD_MINUTES = 10;
+const ZOOM_PADDING = 25; // margin around a zone's seats when zoomed in
+
+// Screen layout of zones: top row = furthest from stage, bottom row = closest to stage
+const ZONE_ROWS = [
+  ['F', 'E', 'D'], // closest to stage
+  ['C', 'B', 'A'], // furthest from stage
+];
 
 export default function SeatMap({ showId, userId }) {
   const [seats, setSeats] = useState([]);
@@ -15,6 +22,7 @@ export default function SeatMap({ showId, userId }) {
   const [message, setMessage] = useState(null);
   const [messageType, setMessageType] = useState('info');
   const [now, setNow] = useState(Date.now());
+  const [selectedZone, setSelectedZone] = useState(null); // null = zone overview screen
   const messageTimeoutRef = useRef(null);
 
   function showMessage(text, type = 'info', autoClearMs = 4000) {
@@ -205,7 +213,74 @@ export default function SeatMap({ showId, userId }) {
       .catch(() => { /* booking already succeeded; a failed email isn't fatal */ });
   }
 
-  // CSS variables carry the actual colors, defined in theme.css
+  // Per-zone occupancy stats for the overview screen
+  const zoneStats = useMemo(() => {
+    const stats = {};
+    seats.forEach(seat => {
+      if (!stats[seat.section]) stats[seat.section] = { total: 0, available: 0 };
+      stats[seat.section].total += 1;
+      if (seatStatus(seat.id) === 'available') stats[seat.section].available += 1;
+    });
+    return stats;
+  }, [seats, seatStatus]);
+
+  // Seats grouped by zone, with a tight bounding viewBox per zone — used both for the
+  // small shape-accurate preview on each overview tile and the zoomed-in detail view.
+  const seatsByZone = useMemo(() => {
+    const groups = {};
+    seats.forEach(seat => {
+      if (!groups[seat.section]) groups[seat.section] = [];
+      groups[seat.section].push(seat);
+    });
+    return groups;
+  }, [seats]);
+
+  function computeViewBox(zoneSeatList, padding) {
+    if (!zoneSeatList || zoneSeatList.length === 0) return '0 0 100 100';
+    const xs = zoneSeatList.map(s => s.pos_x);
+    const ys = zoneSeatList.map(s => s.pos_y);
+    const minX = Math.min(...xs) - padding;
+    const maxX = Math.max(...xs) + padding;
+    const minY = Math.min(...ys) - padding;
+    const maxY = Math.max(...ys) + padding;
+    return `${minX} ${minY} ${maxX - minX} ${maxY - minY}`;
+  }
+
+  // Shared frame size across all zone tiles, so relative zone sizes stay visually accurate
+  // instead of each zone independently zooming to fill the same box.
+  const sharedZoneFrame = useMemo(() => {
+    const zones = Object.keys(seatsByZone);
+    if (zones.length === 0) return { width: 100, height: 100 };
+    let maxWidth = 0;
+    let maxHeight = 0;
+    zones.forEach(z => {
+      const zSeats = seatsByZone[z];
+      const xs = zSeats.map(s => s.pos_x);
+      const ys = zSeats.map(s => s.pos_y);
+      const width = Math.max(...xs) - Math.min(...xs);
+      const height = Math.max(...ys) - Math.min(...ys);
+      if (width > maxWidth) maxWidth = width;
+      if (height > maxHeight) maxHeight = height;
+    });
+    return { width: maxWidth + 20, height: maxHeight + 20 };
+  }, [seatsByZone]);
+
+  function computeCenteredViewBox(zoneSeatList) {
+    if (!zoneSeatList || zoneSeatList.length === 0) return '0 0 100 100';
+    const xs = zoneSeatList.map(s => s.pos_x);
+    const ys = zoneSeatList.map(s => s.pos_y);
+    const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const minX = centerX - sharedZoneFrame.width / 2;
+    const minY = centerY - sharedZoneFrame.height / 2;
+    return `${minX} ${minY} ${sharedZoneFrame.width} ${sharedZoneFrame.height}`;
+  }
+
+  const zoneSeats = selectedZone ? (seatsByZone[selectedZone] || []) : [];
+  const zoneViewBox = useMemo(
+    () => computeViewBox(zoneSeats, ZOOM_PADDING),
+    [zoneSeats]
+  );
   const glow = {
     available: { fill: 'var(--available)' },
     locked: { fill: 'var(--spotlight)' },
@@ -236,57 +311,112 @@ export default function SeatMap({ showId, userId }) {
         </p>
       )}
 
-      <svg viewBox="-70 50 1140 405" style={{ width: '100%', maxWidth: 900, display: 'block', margin: '0 auto' }}>
-        {seats.map(seat => {
-          const status = seatStatus(seat.id);
-          const atCap = mySelections.length >= 4;
-          const clickable = status === 'available' && !atCap;
-          const style = glow[status];
-          const label = `Seat ${seat.section}${seat.seat_number} — ${
-            status === 'checked_in' ? 'checked in' :
-            status === 'available' && atCap ? 'available, but selection limit reached' :
-            status
-          }`;
-          return (
-            <g
-              key={seat.id}
-              className={`seat-dot ${clickable ? 'clickable' : ''}`}
-              style={{ cursor: clickable ? 'pointer' : 'not-allowed' }}
-              onClick={() => clickable && handleSeatClick(seat)}
-              onKeyDown={(e) => {
-                if ((e.key === 'Enter' || e.key === ' ') && clickable) {
-                  e.preventDefault();
-                  handleSeatClick(seat);
-                }
-              }}
-              role="button"
-              tabIndex={clickable ? 0 : -1}
-              aria-label={label}
-              aria-disabled={!clickable}
-            >
-              <title>{label}</title>
-              {/* backrest */}
-              <rect
-                x={seat.pos_x - BACKREST_WIDTH / 2}
-                y={seat.pos_y - SEAT_HEIGHT / 2 - BACKREST_HEIGHT + 1.5}
-                width={BACKREST_WIDTH}
-                height={BACKREST_HEIGHT}
-                rx={1.5}
-                fill={style.fill}
-              />
-              {/* seat cushion */}
-              <rect
-                x={seat.pos_x - SEAT_WIDTH / 2}
-                y={seat.pos_y - SEAT_HEIGHT / 2}
-                width={SEAT_WIDTH}
-                height={SEAT_HEIGHT}
-                rx={2}
-                fill={style.fill}
-              />
-            </g>
-          );
-        })}
-      </svg>
+      {!selectedZone ? (
+        <div className="zone-overview">
+          {ZONE_ROWS.map((row, i) => (
+            <div className="zone-row" key={i}>
+              {row.map(z => {
+                const stat = zoneStats[z] || { total: 0, available: 0 };
+                const full = stat.available === 0;
+                const zSeats = seatsByZone[z] || [];
+                const previewViewBox = computeCenteredViewBox(zSeats);
+                return (
+                  <button
+                    key={z}
+                    className={`zone-tile ${full ? 'zone-tile-full' : ''}`}
+                    onClick={() => setSelectedZone(z)}
+                    disabled={stat.total === 0}
+                    aria-label={`Zone ${z}, ${full ? 'full' : stat.available + ' seats available'}`}
+                  >
+                    <svg viewBox={previewViewBox} className="zone-tile-preview" aria-hidden="true">
+                      {zSeats.map(seat => {
+                        const s = seatStatus(seat.id);
+                        const fill = s === 'available' ? 'var(--available)' : 'var(--text-dim)';
+                        return (
+                          <rect
+                            key={seat.id}
+                            x={seat.pos_x - 4}
+                            y={seat.pos_y - 4}
+                            width={8}
+                            height={8}
+                            fill={fill}
+                            opacity={s === 'available' ? 1 : 0.5}
+                          />
+                        );
+                      })}
+                    </svg>
+                    <div className="zone-tile-overlay">
+                      <span className="zone-tile-label">Zone {z}</span>
+                      <span className="zone-tile-count">
+                        {full ? 'Full' : `${stat.available} available`}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <>
+          <div className="zone-detail-header">
+            <button className="btn btn-text" onClick={() => setSelectedZone(null)}>
+              ← Back to zones
+            </button>
+            <span className="zone-detail-title">Zone {selectedZone}</span>
+          </div>
+
+          <svg viewBox={zoneViewBox} style={{ width: '100%', maxWidth: 500, display: 'block', margin: '0 auto' }}>
+            {zoneSeats.map(seat => {
+              const status = seatStatus(seat.id);
+              const atCap = mySelections.length >= 4;
+              const clickable = status === 'available' && !atCap;
+              const style = glow[status];
+              const label = `Seat ${seat.section}${seat.seat_number} — ${
+                status === 'checked_in' ? 'checked in' :
+                status === 'available' && atCap ? 'available, but selection limit reached' :
+                status
+              }`;
+              return (
+                <g
+                  key={seat.id}
+                  className={`seat-dot ${clickable ? 'clickable' : ''}`}
+                  style={{ cursor: clickable ? 'pointer' : 'not-allowed' }}
+                  onClick={() => clickable && handleSeatClick(seat)}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === ' ') && clickable) {
+                      e.preventDefault();
+                      handleSeatClick(seat);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={clickable ? 0 : -1}
+                  aria-label={label}
+                  aria-disabled={!clickable}
+                >
+                  <title>{label}</title>
+                  <rect
+                    x={seat.pos_x - BACKREST_WIDTH / 2}
+                    y={seat.pos_y - SEAT_HEIGHT / 2 - BACKREST_HEIGHT + 1.5}
+                    width={BACKREST_WIDTH}
+                    height={BACKREST_HEIGHT}
+                    rx={1.5}
+                    fill={style.fill}
+                  />
+                  <rect
+                    x={seat.pos_x - SEAT_WIDTH / 2}
+                    y={seat.pos_y - SEAT_HEIGHT / 2}
+                    width={SEAT_WIDTH}
+                    height={SEAT_HEIGHT}
+                    rx={2}
+                    fill={style.fill}
+                  />
+                </g>
+              );
+            })}
+          </svg>
+        </>
+      )}
 
       <div className="legend">
         <span className="legend-item"><span className="legend-dot" style={{ background: 'var(--available)' }} />Available</span>
