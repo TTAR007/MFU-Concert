@@ -547,16 +547,23 @@ export default function SeatMap({ showId, userId }) {
         <p className={`message-banner message-${messageType}`} role="status" aria-live="polite">{message}</p>
       )}
 
-      {mySelections.length > 0 && (
-        <button
-          className="selection-toggle"
-          onClick={() => setPanelOpen(prev => !prev)}
-          aria-expanded={panelOpen}
-          aria-label={`${mySelections.length} seats selected, view selection`}
-        >
-          {mySelections.length}
-        </button>
-      )}
+      <button
+        className={`selection-toggle ${mySelections.length === 0 ? 'selection-toggle-empty' : ''}`}
+        onClick={() => mySelections.length > 0 && setPanelOpen(prev => !prev)}
+        aria-expanded={panelOpen}
+        aria-label={
+          mySelections.length > 0
+            ? `${mySelections.length} seats selected, view your tickets`
+            : 'No seats selected yet'
+        }
+        disabled={mySelections.length === 0}
+      >
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a1.5 1.5 0 0 0 0 3v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a1.5 1.5 0 0 0 0-3z" />
+          <path d="M13 6v2M13 11v2M13 16v2" strokeDasharray="2 2" />
+        </svg>
+        <span className="selection-toggle-badge">{mySelections.length}</span>
+      </button>
 
       {panelOpen && (
         <div className="selection-backdrop" onClick={() => setPanelOpen(false)}>
