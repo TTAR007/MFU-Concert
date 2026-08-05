@@ -407,7 +407,7 @@ body {
   border-radius: 6px;
   margin: var(--space-xs) auto var(--space-lg);
   width: 42%;
-  max-width: 380px;
+  max-width: 252px;
   min-width: 160px;
   display: flex;
   align-items: center;
@@ -433,74 +433,67 @@ body {
   .stage-label { font-size: 12px; }
 }
 
-/* ============ Zone overview (mobile-friendly section select) ============ */
+/* ============ Zone overview (schematic diagram, mobile-friendly section select) ============ */
 
-.zone-overview {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.zone-diagram-wrap {
   margin: 0 auto var(--space-md);
-  max-width: 100%;
+  max-width: 600px;
 }
 
-.zone-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 2px;
-}
-
-.zone-tile {
-  background: none;
-  border: none;
-  padding: 2px;
-  min-height: 140px;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text);
-}
-
-.zone-tile-preview {
+.zone-diagram {
   width: 100%;
-  height: 140px;
+  height: auto;
+  display: block;
 }
 
-.zone-tile:hover:not(:disabled) .zone-tile-label {
-  color: var(--accent);
+.zone-shape polygon {
+  stroke: rgba(0, 0, 0, 0.3);
+  stroke-width: 1;
+  cursor: pointer;
+  transition: opacity 0.15s, stroke-width 0.15s;
 }
 
-.zone-tile:disabled {
+.zone-shape:hover polygon,
+.zone-shape:focus-visible polygon {
+  opacity: 0.8;
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.zone-shape text {
+  fill: #222222;
+  font-family: 'Inter', sans-serif;
+  font-size: 32px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+
+.zone-shape-full polygon {
   opacity: 0.4;
+}
+
+.zone-shape-full {
   cursor: not-allowed;
 }
 
-.zone-tile-full {
-  opacity: 0.6;
+.zone-diagram-stage {
+  fill: var(--stage-color, var(--text-dim));
 }
 
-.zone-tile-overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  pointer-events: none;
-  text-shadow: 0 1px 3px var(--bg), 0 0 8px var(--bg);
+.zone-diagram-stage-label {
+  fill: #ffffff;
+  font-family: 'Inter', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-anchor: middle;
+  dominant-baseline: middle;
 }
 
-.zone-tile-label {
-  font-weight: 800;
-  font-size: 16px;
-}
-
-.zone-tile-count {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
+.zone-shape:focus {
+  outline: none;
 }
 
 .zone-detail-header {
@@ -515,7 +508,9 @@ body {
 
 .zone-detail-title {
   font-weight: 700;
-  font-size: 16px;
+  font-size: 20px;
+  text-align: center;
+  margin: 0 0 var(--space-xs);
 }
 
 /* ============ Seat map ============ */
@@ -596,9 +591,77 @@ body {
   margin-bottom: var(--space-sm);
 }
 
-.selection-panel {
-  margin-top: var(--space-md);
-  text-align: center;
+/* Floating toggle button showing selection count */
+.selection-toggle {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #ffffff;
+  border: none;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  z-index: 200;
+}
+
+/* Backdrop behind the drawer/sheet */
+.selection-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 300;
+  display: flex;
+  /* Mobile-first: align to bottom for a bottom sheet */
+  align-items: flex-end;
+  justify-content: center;
+}
+
+@media (min-width: 640px) {
+  .selection-backdrop {
+    align-items: stretch;
+    justify-content: flex-end;
+  }
+}
+
+/* Mobile-first: bottom sheet sliding up from the bottom */
+.selection-drawer {
+  position: relative;
+  background: var(--surface);
+  width: 100%;
+  max-height: 80vh;
+  padding: var(--space-md);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  overflow-y: auto;
+  border-radius: 16px 16px 0 0;
+}
+
+/* Desktop: side drawer sliding in from the right */
+@media (min-width: 640px) {
+  .selection-drawer {
+    width: 88%;
+    max-width: 360px;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.35);
+  }
+}
+
+.selection-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  padding-right: 32px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-sm);
 }
 
 .selection-count {
@@ -617,15 +680,106 @@ body {
   gap: 6px;
 }
 
-.selection-item {
+.ticket-stub {
+  position: relative;
   display: flex;
-  justify-content: space-between;
   align-items: center;
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: var(--space-sm) var(--space-md);
-  font-size: 13px;
+  border-radius: 10px;
+  overflow: hidden;
+  min-height: 56px;
+}
+
+.ticket-stub-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px var(--space-md);
+  gap: 2px;
+}
+
+.ticket-stub-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+}
+
+.ticket-stub-number {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Perforated divider between the ticket body and the tear-off stub */
+.ticket-stub-perforation {
+  position: relative;
+  align-self: stretch;
+  width: 0;
+  border-left: 2px dashed var(--border);
+}
+
+.ticket-stub-notch {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.ticket-stub-notch-top {
+  top: -7px;
+}
+
+.ticket-stub-notch-bottom {
+  bottom: -7px;
+}
+
+.ticket-stub-view {
+  flex-shrink: 0;
+  width: 64px;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--accent);
+}
+
+.ticket-stub-view-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.ticket-stub-checked-in {
+  border-color: var(--success);
+}
+
+.ticket-stub-checked-in .ticket-stub-view {
+  color: var(--success);
+}
+
+.ticket-stub-remove {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.ticket-stub-remove:hover {
+  color: var(--taken);
 }
 
 .section-subtitle {
@@ -711,7 +865,7 @@ body {
   font-weight: 700;
   font-size: 19px;
   letter-spacing: -0.2px;
-  margin: 0 0 var(--space-sm);
+  margin: var(--space-md) 0 var(--space-sm);
 }
 
 @media (min-width: 640px) {

@@ -9,12 +9,6 @@ const BACKREST_HEIGHT = 3.5;
 const HOLD_MINUTES = 10;
 const ZOOM_PADDING = 25; // margin around a zone's seats when zoomed in
 
-// Screen layout of zones: top row = furthest from stage, bottom row = closest to stage
-const ZONE_ROWS = [
-  ['F', 'E', 'D'], // closest to stage
-  ['C', 'B', 'A'], // furthest from stage
-];
-
 export default function SeatMap({ showId, userId }) {
   const [seats, setSeats] = useState([]);
   const [reservations, setReservations] = useState({});
@@ -23,6 +17,7 @@ export default function SeatMap({ showId, userId }) {
   const [messageType, setMessageType] = useState('info');
   const [now, setNow] = useState(Date.now());
   const [selectedZone, setSelectedZone] = useState(null); // null = zone overview screen
+  const [panelOpen, setPanelOpen] = useState(false);
   const messageTimeoutRef = useRef(null);
 
   function showMessage(text, type = 'info', autoClearMs = 4000) {
@@ -165,6 +160,7 @@ export default function SeatMap({ showId, userId }) {
     }
 
     const expiresAt = new Date(Date.now() + HOLD_MINUTES * 60 * 1000).toISOString();
+    if (mySelections.length === 0) setPanelOpen(true);
     setMySelections(prev => [...prev, seat.id]);
     setReservations(prev => ({ ...prev, [seat.id]: { status: 'locked', user_id: userId, expires_at: expiresAt } }));
     showMessage(null);
@@ -206,6 +202,7 @@ export default function SeatMap({ showId, userId }) {
 
     showMessage(`Booked ${data.confirmed_count} seat(s)!`, 'success');
     setMySelections([]);
+    setPanelOpen(false);
     await loadData();
 
     // Fire-and-forget: email sending shouldn't block or fail the booking itself.
@@ -246,41 +243,155 @@ export default function SeatMap({ showId, userId }) {
     return `${minX} ${minY} ${maxX - minX} ${maxY - minY}`;
   }
 
-  // Shared frame size across all zone tiles, so relative zone sizes stay visually accurate
-  // instead of each zone independently zooming to fill the same box.
-  const sharedZoneFrame = useMemo(() => {
-    const zones = Object.keys(seatsByZone);
-    if (zones.length === 0) return { width: 100, height: 100 };
-    let maxWidth = 0;
-    let maxHeight = 0;
-    zones.forEach(z => {
-      const zSeats = seatsByZone[z];
-      const xs = zSeats.map(s => s.pos_x);
-      const ys = zSeats.map(s => s.pos_y);
-      const width = Math.max(...xs) - Math.min(...xs);
-      const height = Math.max(...ys) - Math.min(...ys);
-      if (width > maxWidth) maxWidth = width;
-      if (height > maxHeight) maxHeight = height;
-    });
-    return { width: maxWidth + 20, height: maxHeight + 20 };
-  }, [seatsByZone]);
-
-  function computeCenteredViewBox(zoneSeatList) {
-    if (!zoneSeatList || zoneSeatList.length === 0) return '0 0 100 100';
-    const xs = zoneSeatList.map(s => s.pos_x);
-    const ys = zoneSeatList.map(s => s.pos_y);
-    const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
-    const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
-    const minX = centerX - sharedZoneFrame.width / 2;
-    const minY = centerY - sharedZoneFrame.height / 2;
-    return `${minX} ${minY} ${sharedZoneFrame.width} ${sharedZoneFrame.height}`;
-  }
-
   const zoneSeats = selectedZone ? (seatsByZone[selectedZone] || []) : [];
   const zoneViewBox = useMemo(
     () => computeViewBox(zoneSeats, ZOOM_PADDING),
     [zoneSeats]
   );
+
+  // Traces a zone's real curved outline using its actual seat coordinates —
+  // front edge (nearest row), then back edge (furthest row) in reverse, closing the loop.
+  function zoneOutline(zoneSeatList) {
+    if (!zoneSeatList || zoneSeatList.length === 0) return '';
+    const rows = [...new Set(zoneSeatList.map(s => s.row_number))].sort((a, b) => a - b);
+    const edgeRow1 = zoneSeatList.filter(s => s.row_number === rows[0]).sort((a, b) => a.pos_x - b.pos_x);
+    const edgeRow2 = zoneSeatList
+      .filter(s => s.row_number === rows[rows.length - 1])
+      .sort((a, b) => a.pos_x - b.pos_x)
+      .reverse();
+    return [...edgeRow1, ...edgeRow2].map(s => `${s.pos_x},${s.pos_y}`).join(' ');
+  }
+
+  function zoneCentroid(zoneSeatList) {
+    if (!zoneSeatList || zoneSeatList.length === 0) return { x: 0, y: 0 };
+    const xs = zoneSeatList.map(s => s.pos_x);
+    const ys = zoneSeatList.map(s => s.pos_y);
+    return {
+      x: (Math.min(...xs) + Math.max(...xs)) / 2,
+      y: (Math.min(...ys) + Math.max(...ys)) / 2,
+    };
+  }
+
+  // Shared viewBox covering every zone, using the real coordinate system directly —
+  // so the overview's curve/proportions/left-right order automatically match the real data.
+  const overviewViewBox = useMemo(() => {
+    if (seats.length === 0) return '0 0 100 100';
+    const xs = seats.map(s => s.pos_x);
+    const ys = seats.map(s => s.pos_y);
+    const pad = 20;
+    const minX = Math.min(...xs) - pad;
+    const maxX = Math.max(...xs) + pad;
+    const minY = Math.min(...ys) - pad - 195; // extra room above for the larger stage rect
+    const maxY = Math.max(...ys) + pad;
+    return `${minX} ${minY} ${maxX - minX} ${maxY - minY}`;
+  }, [seats]);
+
+  const ZONE_COLORS = {
+    A: '#d9a8c0',
+    B: '#c4c4c4',
+    C: '#b8d98a',
+    D: '#8ecdd0',
+    E: '#e8a8a0',
+    F: '#d9d580',
+  };
+
+  const stageRect = useMemo(() => {
+    if (seats.length === 0) return { x: 0, y: 0, width: 100, height: 20 };
+    const xs = seats.map(s => s.pos_x);
+    const minY = Math.min(...seats.map(s => s.pos_y));
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const MAX_STAGE_WIDTH = 600;
+    const width = Math.min((maxX - minX) * 0.9, MAX_STAGE_WIDTH);
+    const height = 75;
+    return {
+      x: minX + (maxX - minX) / 2 - width / 2,
+      y: minY - 175,
+      width,
+      height,
+    };
+  }, [seats]);
+
+  // Angle (in degrees, from vertical) of the line connecting a zone's front-row and
+  // back-row extreme point on a given side ('min' = leftmost, 'max' = rightmost).
+  function edgeAngle(zoneSeatList, side) {
+    if (!zoneSeatList || zoneSeatList.length === 0) return 0;
+    const rows = [...new Set(zoneSeatList.map(s => s.row_number))].sort((a, b) => a - b);
+    const pick = (rowNum) => {
+      const rowSeats = zoneSeatList.filter(s => s.row_number === rowNum);
+      return side === 'min'
+        ? rowSeats.reduce((a, b) => (a.pos_x < b.pos_x ? a : b))
+        : rowSeats.reduce((a, b) => (a.pos_x > b.pos_x ? a : b));
+    };
+    const p1 = pick(rows[0]);
+    const p2 = pick(rows[rows.length - 1]);
+    return Math.atan2(p2.pos_x - p1.pos_x, p2.pos_y - p1.pos_y) * (180 / Math.PI);
+  }
+
+  // The seat closest to a zone's bottom-left corner (min x, max y) — used as a rotation pivot.
+  function bottomLeftCorner(zoneSeatList) {
+    if (!zoneSeatList || zoneSeatList.length === 0) return { x: 0, y: 0 };
+    const minX = Math.min(...zoneSeatList.map(s => s.pos_x));
+    const maxY = Math.max(...zoneSeatList.map(s => s.pos_y));
+    let best = zoneSeatList[0];
+    let bestDist = Infinity;
+    for (const s of zoneSeatList) {
+      const d = Math.hypot(s.pos_x - minX, s.pos_y - maxY);
+      if (d < bestDist) { bestDist = d; best = s; }
+    }
+    return { x: best.pos_x, y: best.pos_y };
+  }
+
+  // The seat closest to a zone's bottom-right corner (max x, max y) — used as a rotation pivot.
+  function bottomRightCorner(zoneSeatList) {
+    if (!zoneSeatList || zoneSeatList.length === 0) return { x: 0, y: 0 };
+    const maxX = Math.max(...zoneSeatList.map(s => s.pos_x));
+    const maxY = Math.max(...zoneSeatList.map(s => s.pos_y));
+    let best = zoneSeatList[0];
+    let bestDist = Infinity;
+    for (const s of zoneSeatList) {
+      const d = Math.hypot(s.pos_x - maxX, s.pos_y - maxY);
+      if (d < bestDist) { bestDist = d; best = s; }
+    }
+    return { x: best.pos_x, y: best.pos_y };
+  }
+
+  // Rotate zone A (pivoting on its bottom-left corner) so its right edge is parallel to B's left edge.
+  const zoneARotation = useMemo(() => {
+    const aSeats = seatsByZone['A'] || [];
+    const bSeats = seatsByZone['B'] || [];
+    if (aSeats.length === 0 || bSeats.length === 0) return { deg: 0, cx: 0, cy: 0 };
+    const aRightAngle = edgeAngle(aSeats, 'max');
+    const bLeftAngle = edgeAngle(bSeats, 'min');
+    const pivot = bottomLeftCorner(aSeats);
+    return { deg: (aRightAngle - bLeftAngle) * 3.5, cx: pivot.x, cy: pivot.y };
+  }, [seatsByZone]);
+
+  // Mirrors zone A's rotation amount exactly (same magnitude and sign, since D uses the
+  // same formula pattern as A relative to its own neighbor).
+  const zoneDRotation = useMemo(() => {
+    const dSeats = seatsByZone['D'] || [];
+    if (dSeats.length === 0) return { deg: 0, cx: 0, cy: 0 };
+    const pivot = bottomLeftCorner(dSeats);
+    return { deg: zoneARotation.deg, cx: pivot.x, cy: pivot.y };
+  }, [seatsByZone, zoneARotation]);
+
+  // Mirrors zone D's rotation amount exactly (opposite sign), pivoting on F's bottom-right corner.
+  const zoneFRotation = useMemo(() => {
+    const fSeats = seatsByZone['F'] || [];
+    if (fSeats.length === 0) return { deg: 0, cx: 0, cy: 0 };
+    const pivot = bottomRightCorner(fSeats);
+    return { deg: -zoneDRotation.deg, cx: pivot.x, cy: pivot.y };
+  }, [seatsByZone, zoneDRotation]);
+
+  // Mirrors zone A's rotation amount exactly (same magnitude, opposite sign) for visual symmetry.
+  const zoneCRotation = useMemo(() => {
+    const cSeats = seatsByZone['C'] || [];
+    if (cSeats.length === 0) return { deg: 0, cx: 0, cy: 0 };
+    const pivot = bottomRightCorner(cSeats);
+    return { deg: -zoneARotation.deg, cx: pivot.x, cy: pivot.y };
+  }, [seatsByZone, zoneARotation]);
+
   const glow = {
     available: { fill: 'var(--available)' },
     locked: { fill: 'var(--spotlight)' },
@@ -301,9 +412,6 @@ export default function SeatMap({ showId, userId }) {
   return (
     <div className="seat-map-wrap">
       <h2 className="section-heading" style={{ textAlign: 'center' }}>C4 Building</h2>
-      <div className="stage-bar">
-        <span className="stage-label">STAGE</span>
-      </div>
 
       {showExpiryWarning && (
         <p className="expiry-warning">
@@ -312,50 +420,59 @@ export default function SeatMap({ showId, userId }) {
       )}
 
       {!selectedZone ? (
-        <div className="zone-overview">
-          {ZONE_ROWS.map((row, i) => (
-            <div className="zone-row" key={i}>
-              {row.map(z => {
-                const stat = zoneStats[z] || { total: 0, available: 0 };
-                const full = stat.available === 0;
-                const zSeats = seatsByZone[z] || [];
-                const previewViewBox = computeCenteredViewBox(zSeats);
-                return (
-                  <button
-                    key={z}
-                    className={`zone-tile ${full ? 'zone-tile-full' : ''}`}
-                    onClick={() => setSelectedZone(z)}
-                    disabled={stat.total === 0}
-                    aria-label={`Zone ${z}, ${full ? 'full' : stat.available + ' seats available'}`}
-                  >
-                    <svg viewBox={previewViewBox} className="zone-tile-preview" aria-hidden="true">
-                      {zSeats.map(seat => {
-                        const s = seatStatus(seat.id);
-                        const fill = s === 'available' ? 'var(--available)' : 'var(--text-dim)';
-                        return (
-                          <rect
-                            key={seat.id}
-                            x={seat.pos_x - 4}
-                            y={seat.pos_y - 4}
-                            width={8}
-                            height={8}
-                            fill={fill}
-                            opacity={s === 'available' ? 1 : 0.5}
-                          />
-                        );
-                      })}
-                    </svg>
-                    <div className="zone-tile-overlay">
-                      <span className="zone-tile-label">Zone {z}</span>
-                      <span className="zone-tile-count">
-                        {full ? 'Full' : `${stat.available} available`}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+        <div className="zone-diagram-wrap">
+          <svg viewBox={overviewViewBox} className="zone-diagram" role="group" aria-label="Select a zone">
+            <rect
+              x={stageRect.x}
+              y={stageRect.y}
+              width={stageRect.width}
+              height={stageRect.height}
+              rx="4"
+              className="zone-diagram-stage"
+            />
+            <text
+              x={stageRect.x + stageRect.width / 2}
+              y={stageRect.y + stageRect.height / 2}
+              className="zone-diagram-stage-label"
+            >
+              STAGE
+            </text>
+
+            {['A', 'B', 'C', 'D', 'E', 'F'].map(z => {
+              const zSeats = seatsByZone[z] || [];
+              if (zSeats.length === 0) return null;
+              const stat = zoneStats[z] || { total: 0, available: 0 };
+              const full = stat.available === 0;
+              const centroid = zoneCentroid(zSeats);
+              return (
+                <g
+                  key={z}
+                  className={`zone-shape ${full ? 'zone-shape-full' : ''}`}
+                  transform={
+                    z === 'A' ? `rotate(${zoneARotation.deg} ${zoneARotation.cx} ${zoneARotation.cy})` :
+                    z === 'C' ? `rotate(${zoneCRotation.deg} ${zoneCRotation.cx} ${zoneCRotation.cy})` :
+                    z === 'D' ? `rotate(${zoneDRotation.deg} ${zoneDRotation.cx} ${zoneDRotation.cy})` :
+                    z === 'F' ? `rotate(${zoneFRotation.deg} ${zoneFRotation.cx} ${zoneFRotation.cy})` :
+                    (z === 'B' || z === 'E') ? 'translate(0, 12)' :
+                    undefined
+                  }
+                  onClick={() => stat.total > 0 && setSelectedZone(z)}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === ' ') && stat.total > 0) {
+                      e.preventDefault();
+                      setSelectedZone(z);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={stat.total > 0 ? 0 : -1}
+                  aria-label={`Zone ${z}, ${full ? 'full' : stat.available + ' seats available'}`}
+                >
+                  <polygon points={zoneOutline(zSeats)} fill={ZONE_COLORS[z]} />
+                  <text x={centroid.x} y={centroid.y}>{z}</text>
+                </g>
+              );
+            })}
+          </svg>
         </div>
       ) : (
         <>
@@ -363,8 +480,8 @@ export default function SeatMap({ showId, userId }) {
             <button className="btn btn-text" onClick={() => setSelectedZone(null)}>
               ← Back to zones
             </button>
-            <span className="zone-detail-title">Zone {selectedZone}</span>
           </div>
+          <p className="zone-detail-title">Zone {selectedZone}</p>
 
           <svg viewBox={zoneViewBox} style={{ width: '100%', maxWidth: 500, display: 'block', margin: '0 auto' }}>
             {zoneSeats.map(seat => {
@@ -430,31 +547,78 @@ export default function SeatMap({ showId, userId }) {
         <p className={`message-banner message-${messageType}`} role="status" aria-live="polite">{message}</p>
       )}
 
-      <div className="selection-panel">
-        <p className="selection-count">
-          {mySelections.length} of 4 seats selected
-          {mySelections.length >= 4 && ' — limit reached'}
-        </p>
-
-        {mySelections.length > 0 && (
-          <ul className="selection-list">
-            {mySelections.map(id => {
-              const seat = seats.find(s => s.id === id);
-              if (!seat) return null;
-              return (
-                <li key={id} className="selection-item">
-                  <span>Seat {seat.section}{seat.seat_number}</span>
-                  <button className="btn-text" onClick={() => handleRelease(id)}>Remove</button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-        <button className="btn btn-primary" disabled={mySelections.length === 0} onClick={handleConfirm}>
-          Confirm booking
+      {mySelections.length > 0 && (
+        <button
+          className="selection-toggle"
+          onClick={() => setPanelOpen(prev => !prev)}
+          aria-expanded={panelOpen}
+          aria-label={`${mySelections.length} seats selected, view selection`}
+        >
+          {mySelections.length}
         </button>
-      </div>
+      )}
+
+      {panelOpen && (
+        <div className="selection-backdrop" onClick={() => setPanelOpen(false)}>
+          <div
+            className="selection-drawer"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Your seat selection"
+          >
+            <button
+              className="ticket-modal-close"
+              onClick={() => setPanelOpen(false)}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+
+            <div className="selection-drawer-header">
+              <span className="selection-count">
+                {mySelections.length} of 4 seats selected
+                {mySelections.length >= 4 && ' — limit reached'}
+              </span>
+            </div>
+
+            <ul className="selection-list">
+              {mySelections.map(id => {
+                const seat = seats.find(s => s.id === id);
+                if (!seat) return null;
+                return (
+                  <li key={id} className="ticket-stub">
+                    <div className="ticket-stub-main">
+                      <span className="ticket-stub-eyebrow">SEAT</span>
+                      <span className="ticket-stub-number">{seat.section}{seat.seat_number}</span>
+                    </div>
+                    <div className="ticket-stub-perforation" aria-hidden="true">
+                      <span className="ticket-stub-notch ticket-stub-notch-top" />
+                      <span className="ticket-stub-notch ticket-stub-notch-bottom" />
+                    </div>
+                    <button
+                      className="ticket-stub-remove"
+                      onClick={() => handleRelease(id)}
+                      aria-label={`Remove seat ${seat.section}${seat.seat_number}`}
+                    >
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M10 11v6M14 11v6" />
+                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                      </svg>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <button className="btn btn-primary" onClick={handleConfirm} style={{ width: '100%' }}>
+              Confirm booking
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
