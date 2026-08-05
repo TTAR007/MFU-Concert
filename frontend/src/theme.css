@@ -513,6 +513,55 @@ body {
   margin: 0 0 var(--space-xs);
 }
 
+.booking-rules {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-md);
+  font-size: 13px;
+}
+
+.booking-rules summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+  list-style: none;
+}
+
+.booking-rules summary::-webkit-details-marker {
+  display: none;
+}
+
+.booking-rules summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform 0.15s;
+}
+
+.booking-rules[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.booking-rules ul {
+  margin: var(--space-sm) 0 0;
+  padding-left: 20px;
+  color: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rules-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  vertical-align: middle;
+  margin-right: 2px;
+}
+
 /* ============ Seat map ============ */
 
 .seat-map-wrap {

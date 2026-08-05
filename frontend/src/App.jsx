@@ -8,7 +8,7 @@ import CheckIn from './components/CheckIn';
 import './theme.css';
 
 const SHOW_ID = 'e8a7a715-c26a-4e05-8250-5c6ee79922df';
-const EVENT_NAME = 'Your Concert Name';
+const EVENT_NAME = 'MFU Band Concert 2026'; // update to your real event name
 
 const AVATAR_COLORS = ['#6366f1', '#22c55e', '#f5a623', '#ef4444', '#06b6d4', '#a855f7'];
 

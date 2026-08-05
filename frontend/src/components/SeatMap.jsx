@@ -411,6 +411,21 @@ export default function SeatMap({ showId, userId }) {
 
   return (
     <div className="seat-map-wrap">
+      <details className="booking-rules">
+        <summary>How booking works</summary>
+        <ul>
+          <li>Tap a zone below to view and select its seats.</li>
+          <li>You can hold up to <strong>4 seats</strong> at a time.</li>
+          <li>Held seats are reserved for <strong>10 minutes</strong> — confirm before time runs out or they're released automatically.</li>
+          <li>Tap the ticket icon (bottom right) anytime to review your held seats and confirm your booking.</li>
+          <li><span className="rules-swatch" style={{ background: 'var(--available)' }} /> Available &nbsp;
+              <span className="rules-swatch" style={{ background: 'var(--spotlight)' }} /> Held by others &nbsp;
+              <span className="rules-swatch" style={{ background: 'var(--stage-glow)' }} /> Held by you &nbsp;
+              <span className="rules-swatch" style={{ background: 'var(--taken)' }} /> Booked &nbsp;
+              <span className="rules-swatch" style={{ background: 'var(--success)' }} /> Checked in</li>
+        </ul>
+      </details>
+
       <h2 className="section-heading" style={{ textAlign: 'center' }}>C4 Building</h2>
 
       {showExpiryWarning && (
