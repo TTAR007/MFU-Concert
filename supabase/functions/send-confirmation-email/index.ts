@@ -1,11 +1,11 @@
 // supabase/functions/send-confirmation-email/index.ts
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
 
-const EVENT_NAME = 'Your Concert Name';
+const EVENT_NAME = 'MFU Concert 2026'; // update to your real event name
 const EVENT_DATE = 'Saturday, September 15, 2026 · 7:00 PM'; // update to your real date
 const VENUE = 'C4 Building';
-const RESEND_FROM = 'onboarding@resend.dev'; // switch to your verified domain sender later
-const SITE_URL = 'https://your-deployed-site-url.example.com'; // update once deployed
+const SITE_URL = 'https://mfu-concert-blush.vercel.app/'; // update once deployed
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,7 +14,6 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req) => {
-  // Browsers send an OPTIONS preflight request before the real POST — must respond OK, not process it as data.
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -36,8 +35,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Client scoped to the calling user's own JWT — respects RLS,
-    // so this can only ever read the caller's own reservations.
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!,
@@ -94,26 +91,27 @@ Deno.serve(async (req) => {
       </div>
     `;
 
-    const resendResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${Deno.env.get('RESEND_API_KEY')}`,
-        'Content-Type': 'application/json',
+    const client = new SMTPClient({
+      connection: {
+        hostname: 'smtp.gmail.com',
+        port: 465,
+        tls: true,
+        auth: {
+          username: Deno.env.get('GMAIL_USER')!,
+          password: Deno.env.get('GMAIL_APP_PASSWORD')!,
+        },
       },
-      body: JSON.stringify({
-        from: RESEND_FROM,
-        to: user.email,
-        subject: `Booking confirmed — ${EVENT_NAME}`,
-        html: emailHtml,
-      }),
     });
 
-    if (!resendResponse.ok) {
-      const errText = await resendResponse.text();
-      return new Response(JSON.stringify({ error: 'email_send_failed', detail: errText }), {
-        status: 502,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    try {
+      await client.send({
+        from: Deno.env.get('GMAIL_USER')!,
+        to: user.email!,
+        subject: `Booking confirmed — ${EVENT_NAME}`,
+        html: emailHtml,
       });
+    } finally {
+      await client.close();
     }
 
     return new Response(JSON.stringify({ success: true, seatCount: seatLabels.length }), {
