@@ -8,6 +8,8 @@ export default function AdminView({ showId, adminId }) {
   const [message, setMessage] = useState(null);
   const [selectedZone, setSelectedZone] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [releasingId, setReleasingId] = useState(null);
 
   async function fetchAllRows(query) {
     const pageSize = 1000;
@@ -40,15 +42,18 @@ export default function AdminView({ showId, adminId }) {
     const map = {};
     (resData || []).forEach(r => { map[r.seat_id] = r; });
     setReservations(map);
+    setLoading(false);
   }
 
   useEffect(() => { loadData(); }, [showId]);
 
   async function handleRelease(seatId) {
+    setReleasingId(seatId);
     const { data, error } = await supabase.rpc('release_seat', {
       p_seat_id: seatId,
       p_admin_id: adminId,
     });
+    setReleasingId(null);
 
     if (error || !data?.success) {
       setMessage('Could not release seat: ' + (data?.reason || 'error'));
@@ -86,6 +91,11 @@ export default function AdminView({ showId, adminId }) {
   return (
     <div>
       <h2 className="section-heading">Seat occupancy</h2>
+
+      {loading ? (
+        <p className="empty-state">Loading occupancy data…</p>
+      ) : (
+        <>
       <p className="admin-summary">
         {confirmedCount} confirmed &middot; {lockedCount} currently held &middot; {total - confirmedCount - lockedCount} available &middot; {total} total
       </p>
@@ -150,7 +160,9 @@ export default function AdminView({ showId, adminId }) {
                   </td>
                   <td title={r.profiles?.email || r.user_id}>{r.profiles?.email || r.user_id}</td>
                   <td>
-                    <button className="btn" onClick={() => handleRelease(s.id)}>Release</button>
+                    <button className="btn" onClick={() => handleRelease(s.id)} disabled={releasingId === s.id}>
+                      {releasingId === s.id ? 'Releasing…' : 'Release'}
+                    </button>
                   </td>
                 </tr>
               );
@@ -158,6 +170,8 @@ export default function AdminView({ showId, adminId }) {
           </tbody>
         </table>
         </div>
+      )}
+      </>
       )}
     </div>
   );

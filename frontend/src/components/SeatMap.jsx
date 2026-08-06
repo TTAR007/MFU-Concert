@@ -1,5 +1,6 @@
 // src/components/SeatMap.jsx
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { supabase } from '../lib/supabaseClient';
 
 const SEAT_WIDTH = 8;
@@ -18,7 +19,12 @@ export default function SeatMap({ showId, userId }) {
   const [now, setNow] = useState(Date.now());
   const [selectedZone, setSelectedZone] = useState(null); // null = zone overview screen
   const [panelOpen, setPanelOpen] = useState(false);
+  const [lockingSeatId, setLockingSeatId] = useState(null);
+  const [removingId, setRemovingId] = useState(null);
+  const [confirming, setConfirming] = useState(false);
   const messageTimeoutRef = useRef(null);
+  const panMovedRef = useRef(false);
+  const suppressClickRef = useRef(false);
 
   function showMessage(text, type = 'info', autoClearMs = 4000) {
     setMessage(text);
@@ -125,6 +131,13 @@ export default function SeatMap({ showId, userId }) {
     return 'locked';
   }, [reservations, userId, now]);
 
+  // Whether a seat belongs to the current user, regardless of status — used to
+  // highlight the user's own confirmed/checked-in seats distinctly on the map.
+  function isMyReservation(seatId) {
+    const r = reservations[seatId];
+    return !!r && r.user_id === userId;
+  }
+
   useEffect(() => {
     setMySelections(prev =>
       prev.filter(id => {
@@ -135,18 +148,21 @@ export default function SeatMap({ showId, userId }) {
   }, [now, reservations]);
 
   async function handleSeatClick(seat) {
+    if (suppressClickRef.current) return;
     const status = seatStatus(seat.id);
-    if (status !== 'available') return;
+    if (status !== 'available' || lockingSeatId) return;
 
     if (mySelections.length >= 4) {
       showMessage('You can only select up to 4 seats.', 'error');
       return;
     }
 
+    setLockingSeatId(seat.id);
     const { data, error } = await supabase.rpc('lock_seat', {
       p_seat_id: seat.id,
       p_user_id: userId,
     });
+    setLockingSeatId(null);
 
     if (error || !data?.success) {
       const reason = data?.reason || 'error';
@@ -167,17 +183,23 @@ export default function SeatMap({ showId, userId }) {
   }
 
   async function handleRelease(seatId) {
+    setRemovingId(seatId);
     const { data, error } = await supabase.rpc('release_own_lock', {
       p_seat_id: seatId,
       p_user_id: userId,
     });
+    setRemovingId(null);
 
     if (error || !data?.success) {
       showMessage('Could not remove that seat. Please try again.', 'error');
       return;
     }
 
-    setMySelections(prev => prev.filter(id => id !== seatId));
+    setMySelections(prev => {
+      const next = prev.filter(id => id !== seatId);
+      if (next.length === 0) setPanelOpen(false);
+      return next;
+    });
     setReservations(prev => {
       const next = { ...prev };
       delete next[seatId];
@@ -186,12 +208,14 @@ export default function SeatMap({ showId, userId }) {
   }
 
   async function handleConfirm() {
+    setConfirming(true);
     const { data, error } = await supabase.rpc('confirm_reservation', {
       p_user_id: userId,
       p_show_id: showId,
     });
 
     if (error || !data?.success) {
+      setConfirming(false);
       showMessage(
         'Could not confirm — your hold(s) may have expired. Please reselect your seats.',
         'error'
@@ -204,6 +228,7 @@ export default function SeatMap({ showId, userId }) {
     setMySelections([]);
     setPanelOpen(false);
     await loadData();
+    setConfirming(false);
 
     // Fire-and-forget: email sending shouldn't block or fail the booking itself.
     supabase.functions.invoke('send-confirmation-email', { body: { showId } })
@@ -232,11 +257,11 @@ export default function SeatMap({ showId, userId }) {
     return groups;
   }, [seats]);
 
-  function computeViewBox(zoneSeatList, padding) {
+  function computeViewBox(zoneSeatList, padding, extraLeft = 0) {
     if (!zoneSeatList || zoneSeatList.length === 0) return '0 0 100 100';
     const xs = zoneSeatList.map(s => s.pos_x);
     const ys = zoneSeatList.map(s => s.pos_y);
-    const minX = Math.min(...xs) - padding;
+    const minX = Math.min(...xs) - padding - extraLeft;
     const maxX = Math.max(...xs) + padding;
     const minY = Math.min(...ys) - padding;
     const maxY = Math.max(...ys) + padding;
@@ -244,8 +269,25 @@ export default function SeatMap({ showId, userId }) {
   }
 
   const zoneSeats = selectedZone ? (seatsByZone[selectedZone] || []) : [];
+
+  // One label per row: row number, placed just left of that row's leftmost seat,
+  // using that exact seat's y-position (rows are curved, so y varies along the row).
+  const rowLabels = useMemo(() => {
+    if (zoneSeats.length === 0) return [];
+    const rows = {};
+    zoneSeats.forEach(s => {
+      if (!rows[s.row_number] || s.pos_x < rows[s.row_number].pos_x) {
+        rows[s.row_number] = s;
+      }
+    });
+    return Object.entries(rows).map(([rowNumber, leftmostSeat]) => ({
+      rowNumber,
+      x: leftmostSeat.pos_x - 14,
+      y: leftmostSeat.pos_y,
+    }));
+  }, [zoneSeats]);
   const zoneViewBox = useMemo(
-    () => computeViewBox(zoneSeats, ZOOM_PADDING),
+    () => computeViewBox(zoneSeats, ZOOM_PADDING, 16),
     [zoneSeats]
   );
 
@@ -498,55 +540,112 @@ export default function SeatMap({ showId, userId }) {
           </div>
           <p className="zone-detail-title">Zone {selectedZone}</p>
 
-          <svg viewBox={zoneViewBox} style={{ width: '100%', maxWidth: 500, display: 'block', margin: '0 auto' }}>
-            {zoneSeats.map(seat => {
-              const status = seatStatus(seat.id);
-              const atCap = mySelections.length >= 4;
-              const clickable = status === 'available' && !atCap;
-              const style = glow[status];
-              const label = `Seat ${seat.section}${seat.seat_number} — ${
-                status === 'checked_in' ? 'checked in' :
-                status === 'available' && atCap ? 'available, but selection limit reached' :
-                status
-              }`;
-              return (
-                <g
-                  key={seat.id}
-                  className={`seat-dot ${clickable ? 'clickable' : ''}`}
-                  style={{ cursor: clickable ? 'pointer' : 'not-allowed' }}
-                  onClick={() => clickable && handleSeatClick(seat)}
-                  onKeyDown={(e) => {
-                    if ((e.key === 'Enter' || e.key === ' ') && clickable) {
-                      e.preventDefault();
-                      handleSeatClick(seat);
-                    }
-                  }}
-                  role="button"
-                  tabIndex={clickable ? 0 : -1}
-                  aria-label={label}
-                  aria-disabled={!clickable}
-                >
-                  <title>{label}</title>
-                  <rect
-                    x={seat.pos_x - BACKREST_WIDTH / 2}
-                    y={seat.pos_y - SEAT_HEIGHT / 2 - BACKREST_HEIGHT + 1.5}
-                    width={BACKREST_WIDTH}
-                    height={BACKREST_HEIGHT}
-                    rx={1.5}
-                    fill={style.fill}
-                  />
-                  <rect
-                    x={seat.pos_x - SEAT_WIDTH / 2}
-                    y={seat.pos_y - SEAT_HEIGHT / 2}
-                    width={SEAT_WIDTH}
-                    height={SEAT_HEIGHT}
-                    rx={2}
-                    fill={style.fill}
-                  />
-                </g>
-              );
-            })}
-          </svg>
+          <TransformWrapper
+            initialScale={1}
+            minScale={0.8}
+            maxScale={4}
+            centerOnInit
+            limitToBounds
+            doubleClick={{ mode: 'toggle' }}
+            onPanningStart={() => { panMovedRef.current = false; }}
+            onPanning={() => { panMovedRef.current = true; }}
+            onPanningStop={() => {
+              if (panMovedRef.current) {
+                suppressClickRef.current = true;
+                setTimeout(() => { suppressClickRef.current = false; }, 100);
+              }
+            }}
+          >
+            {({ zoomIn, zoomOut, resetTransform }) => (
+              <>
+                <div className="zoom-controls-bar">
+                  <button type="button" className="btn zoom-btn" onClick={() => zoomIn()} aria-label="Zoom in">+</button>
+                  <button type="button" className="btn zoom-btn" onClick={() => zoomOut()} aria-label="Zoom out">−</button>
+                  <button type="button" className="btn zoom-btn" onClick={() => resetTransform()} aria-label="Reset zoom">⟲</button>
+                </div>
+                <div className="zoom-pan-wrap">
+                  <TransformComponent
+                    wrapperStyle={{ width: '100%', maxWidth: 500, margin: '0 auto' }}
+                    contentStyle={{ width: '100%' }}
+                  >
+                    <svg viewBox={zoneViewBox} style={{ width: '100%', display: 'block', cursor: lockingSeatId ? 'wait' : 'default' }}>
+                      {rowLabels.map(rl => (
+                        <text
+                          key={rl.rowNumber}
+                          x={rl.x}
+                          y={rl.y}
+                          className="row-label"
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                        >
+                          {rl.rowNumber}
+                        </text>
+                      ))}
+                      {zoneSeats.map(seat => {
+                        const status = seatStatus(seat.id);
+                        const atCap = mySelections.length >= 4;
+                        const clickable = status === 'available' && !atCap && !lockingSeatId;
+                        const style = glow[status];
+                        const mine = (status === 'confirmed' || status === 'checked_in') && isMyReservation(seat.id);
+                        const label = `Seat ${seat.section}${seat.seat_number} — ${
+                          status === 'checked_in' ? 'checked in' :
+                          status === 'available' && atCap ? 'available, but selection limit reached' :
+                          status
+                        }${mine ? ' — this is your seat' : ''}`;
+                        return (
+                          <g
+                            key={seat.id}
+                            className={`seat-dot ${clickable ? 'clickable' : ''}`}
+                            style={{ cursor: clickable ? 'pointer' : 'not-allowed' }}
+                            onClick={() => clickable && handleSeatClick(seat)}
+                            onKeyDown={(e) => {
+                              if ((e.key === 'Enter' || e.key === ' ') && clickable) {
+                                e.preventDefault();
+                                handleSeatClick(seat);
+                              }
+                            }}
+                            role="button"
+                            tabIndex={clickable ? 0 : -1}
+                            aria-label={label}
+                            aria-disabled={!clickable}
+                          >
+                            <title>{label}</title>
+                            {mine && (
+                              <circle
+                                cx={seat.pos_x}
+                                cy={seat.pos_y}
+                                r={Math.max(SEAT_WIDTH, SEAT_HEIGHT) * 0.95}
+                                fill="none"
+                                stroke="#ffffff"
+                                strokeWidth={1.5}
+                                className="my-seat-ring"
+                              />
+                            )}
+                            <rect
+                              x={seat.pos_x - BACKREST_WIDTH / 2}
+                              y={seat.pos_y - SEAT_HEIGHT / 2 - BACKREST_HEIGHT + 1.5}
+                              width={BACKREST_WIDTH}
+                              height={BACKREST_HEIGHT}
+                              rx={1.5}
+                              fill={style.fill}
+                            />
+                            <rect
+                              x={seat.pos_x - SEAT_WIDTH / 2}
+                              y={seat.pos_y - SEAT_HEIGHT / 2}
+                              width={SEAT_WIDTH}
+                              height={SEAT_HEIGHT}
+                              rx={2}
+                              fill={style.fill}
+                            />
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </TransformComponent>
+                </div>
+              </>
+            )}
+          </TransformWrapper>
         </>
       )}
 
@@ -556,10 +655,11 @@ export default function SeatMap({ showId, userId }) {
         <span className="legend-item"><span className="legend-dot" style={{ background: 'var(--stage-glow)' }} />Held by you</span>
         <span className="legend-item"><span className="legend-dot" style={{ background: 'var(--taken)' }} />Booked</span>
         <span className="legend-item"><span className="legend-dot" style={{ background: 'var(--success)' }} />Checked in</span>
+        <span className="legend-item"><span className="legend-dot legend-ring" />Your booked seat</span>
       </div>
 
       {message && (
-        <p className={`message-banner message-${messageType}`} role="status" aria-live="polite">{message}</p>
+        <p className={`message-toast message-${messageType}`} role="status" aria-live="polite">{message}</p>
       )}
 
       <button
@@ -608,6 +708,7 @@ export default function SeatMap({ showId, userId }) {
               {mySelections.map(id => {
                 const seat = seats.find(s => s.id === id);
                 if (!seat) return null;
+                const isRemoving = removingId === id;
                 return (
                   <li key={id} className="ticket-stub">
                     <div className="ticket-stub-main">
@@ -622,21 +723,26 @@ export default function SeatMap({ showId, userId }) {
                       className="ticket-stub-remove"
                       onClick={() => handleRelease(id)}
                       aria-label={`Remove seat ${seat.section}${seat.seat_number}`}
+                      disabled={isRemoving || confirming}
                     >
-                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                        <path d="M10 11v6M14 11v6" />
-                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                      </svg>
+                      {isRemoving ? (
+                        <span className="mini-spinner" aria-hidden="true" />
+                      ) : (
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                          <path d="M10 11v6M14 11v6" />
+                          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                        </svg>
+                      )}
                     </button>
                   </li>
                 );
               })}
             </ul>
 
-            <button className="btn btn-primary" onClick={handleConfirm} style={{ width: '100%' }}>
-              Confirm booking
+            <button className="btn btn-primary" onClick={handleConfirm} style={{ width: '100%' }} disabled={confirming}>
+              {confirming ? 'Confirming…' : 'Confirm booking'}
             </button>
           </div>
         </div>

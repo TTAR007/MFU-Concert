@@ -1,5 +1,5 @@
 // src/components/MyBookings.jsx
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../lib/supabaseClient';
 
@@ -9,6 +9,8 @@ export default function MyBookings({ showId, userId }) {
   const [activeTicket, setActiveTicket] = useState(null); // the booking object currently shown in overlay
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [zoneMapSeats, setZoneMapSeats] = useState([]);
+  const [zoneMapLoading, setZoneMapLoading] = useState(false);
   const closeButtonRef = useRef(null);
   const lastTriggerRef = useRef(null);
 
@@ -16,7 +18,7 @@ export default function MyBookings({ showId, userId }) {
     setLoading(true);
     const { data, error } = await supabase
       .from('reservations')
-      .select('id, seat_id, ticket_code, checked_in, seats(section, seat_number)')
+      .select('id, seat_id, ticket_code, checked_in, seats(section, row_number, seat_number, pos_x, pos_y)')
       .eq('show_id', showId)
       .eq('user_id', userId)
       .eq('status', 'confirmed')
@@ -38,10 +40,21 @@ export default function MyBookings({ showId, userId }) {
     loadBookings();
   }, [showId, userId]);
 
-  function openTicket(b, triggerEl) {
+  async function openTicket(b, triggerEl) {
     lastTriggerRef.current = triggerEl;
     setActiveTicket(b);
     setConfirmingCancel(false);
+    setZoneMapSeats([]);
+    setZoneMapLoading(true);
+
+    const { data } = await supabase
+      .from('seats')
+      .select('id, row_number, pos_x, pos_y')
+      .eq('show_id', showId)
+      .eq('section', b.seats.section);
+
+    setZoneMapSeats(data || []);
+    setZoneMapLoading(false);
   }
 
   const closeTicket = useCallback(() => {
@@ -68,6 +81,33 @@ export default function MyBookings({ showId, userId }) {
     setConfirmingCancel(false);
     loadBookings();
   }
+
+  const findSeatViewBox = useMemo(() => {
+    if (zoneMapSeats.length === 0) return '0 0 100 100';
+    const xs = zoneMapSeats.map(s => s.pos_x);
+    const ys = zoneMapSeats.map(s => s.pos_y);
+    const pad = 15;
+    const minX = Math.min(...xs) - pad - 10; // extra room on the left for row labels
+    const minY = Math.min(...ys) - pad;
+    const width = Math.max(...xs) - Math.min(...xs) + pad * 2 + 10;
+    const height = Math.max(...ys) - Math.min(...ys) + pad * 2;
+    return `${minX} ${minY} ${width} ${height}`;
+  }, [zoneMapSeats]);
+
+  const findSeatRowLabels = useMemo(() => {
+    if (zoneMapSeats.length === 0) return [];
+    const rows = {};
+    zoneMapSeats.forEach(s => {
+      if (!rows[s.row_number] || s.pos_x < rows[s.row_number].pos_x) {
+        rows[s.row_number] = s;
+      }
+    });
+    return Object.entries(rows).map(([rowNumber, leftmostSeat]) => ({
+      rowNumber,
+      x: leftmostSeat.pos_x - 9,
+      y: leftmostSeat.pos_y,
+    }));
+  }, [zoneMapSeats]);
 
   // Focus the close button when the modal opens; close on Escape
   useEffect(() => {
@@ -151,11 +191,44 @@ export default function MyBookings({ showId, userId }) {
             <p id="ticket-modal-heading" className="section-heading" style={{ marginBottom: 4 }}>
               Seat {activeTicket.seats.section}{activeTicket.seats.seat_number}
             </p>
+            <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>
+              Zone {activeTicket.seats.section} &middot; Row {activeTicket.seats.row_number}
+            </p>
             {activeTicket.checked_in && (
               <p style={{ marginBottom: 12 }}>
                 <span className="status-badge status-checked-in">Checked in</span>
               </p>
             )}
+
+            {!zoneMapLoading && zoneMapSeats.length > 0 && (
+              <div className="find-seat-map">
+                <svg viewBox={findSeatViewBox} className="find-seat-svg" aria-hidden="true">
+                  {findSeatRowLabels.map(rl => (
+                    <text
+                      key={rl.rowNumber}
+                      x={rl.x}
+                      y={rl.y}
+                      className="row-label find-seat-row-label"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                    >
+                      {rl.rowNumber}
+                    </text>
+                  ))}
+                  {zoneMapSeats.map(s => (
+                    <circle
+                      key={s.id}
+                      cx={s.pos_x}
+                      cy={s.pos_y}
+                      r={s.id === activeTicket.seat_id ? 10 : 4}
+                      fill={s.id === activeTicket.seat_id ? 'var(--accent)' : 'var(--border)'}
+                      className={s.id === activeTicket.seat_id ? 'find-seat-highlight' : ''}
+                    />
+                  ))}
+                </svg>
+              </div>
+            )}
+
             {activeTicket.ticket_code && (
               <div className="ticket-qr-large">
                 <QRCodeSVG value={activeTicket.ticket_code} size={220} bgColor="#ffffff" fgColor="#000000" />
