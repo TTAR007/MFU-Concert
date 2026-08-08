@@ -8,13 +8,15 @@ const SEAT_HEIGHT = 7;
 const BACKREST_WIDTH = 6;
 const BACKREST_HEIGHT = 3.5;
 const HOLD_MINUTES = 10;
-const ZOOM_PADDING = 25; // margin around a zone's seats when zoomed in
+const ZOOM_PADDING_X = 25; // horizontal margin around a zone's seats when zoomed in
+const ZOOM_PADDING_Y = 70; // vertical margin (top/bottom)
 
 export default function SeatMap({ showId, userId }) {
   const [seats, setSeats] = useState([]);
   const [reservations, setReservations] = useState({});
   const [mySelections, setMySelections] = useState([]);
   const [message, setMessage] = useState(null);
+  const [toastTop, setToastTop] = useState(16);
   const [messageType, setMessageType] = useState('info');
   const [now, setNow] = useState(Date.now());
   const [selectedZone, setSelectedZone] = useState(null); // null = zone overview screen
@@ -22,6 +24,7 @@ export default function SeatMap({ showId, userId }) {
   const [lockingSeatId, setLockingSeatId] = useState(null);
   const [removingId, setRemovingId] = useState(null);
   const [confirming, setConfirming] = useState(false);
+  const [confirmingBooking, setConfirmingBooking] = useState(false);
   const messageTimeoutRef = useRef(null);
   const panMovedRef = useRef(false);
   const suppressClickRef = useRef(false);
@@ -38,6 +41,25 @@ export default function SeatMap({ showId, userId }) {
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Keep the toast anchored to the true visible screen area, not the full page —
+  // browser pinch-zoom can otherwise leave position:fixed elements off-screen
+  // once the user scrolls a zoomed-in page.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return; // fallback: CSS position:fixed default (top: 16px) still applies
+
+    function updateToastPosition() {
+      setToastTop(vv.offsetTop + 16);
+    }
+    updateToastPosition();
+    vv.addEventListener('resize', updateToastPosition);
+    vv.addEventListener('scroll', updateToastPosition);
+    return () => {
+      vv.removeEventListener('resize', updateToastPosition);
+      vv.removeEventListener('scroll', updateToastPosition);
+    };
   }, []);
 
   async function fetchAllRows(query) {
@@ -216,6 +238,7 @@ export default function SeatMap({ showId, userId }) {
 
     if (error || !data?.success) {
       setConfirming(false);
+      setConfirmingBooking(false);
       showMessage(
         'Could not confirm — your hold(s) may have expired. Please reselect your seats.',
         'error'
@@ -227,6 +250,7 @@ export default function SeatMap({ showId, userId }) {
     showMessage(`Booked ${data.confirmed_count} seat(s)!`, 'success');
     setMySelections([]);
     setPanelOpen(false);
+    setConfirmingBooking(false);
     await loadData();
     setConfirming(false);
 
@@ -257,14 +281,14 @@ export default function SeatMap({ showId, userId }) {
     return groups;
   }, [seats]);
 
-  function computeViewBox(zoneSeatList, padding, extraLeft = 0) {
+  function computeViewBox(zoneSeatList, paddingX, paddingY, extraLeft = 0) {
     if (!zoneSeatList || zoneSeatList.length === 0) return '0 0 100 100';
     const xs = zoneSeatList.map(s => s.pos_x);
     const ys = zoneSeatList.map(s => s.pos_y);
-    const minX = Math.min(...xs) - padding - extraLeft;
-    const maxX = Math.max(...xs) + padding;
-    const minY = Math.min(...ys) - padding;
-    const maxY = Math.max(...ys) + padding;
+    const minX = Math.min(...xs) - paddingX - extraLeft;
+    const maxX = Math.max(...xs) + paddingX;
+    const minY = Math.min(...ys) - paddingY;
+    const maxY = Math.max(...ys) + paddingY;
     return `${minX} ${minY} ${maxX - minX} ${maxY - minY}`;
   }
 
@@ -287,7 +311,7 @@ export default function SeatMap({ showId, userId }) {
     }));
   }, [zoneSeats]);
   const zoneViewBox = useMemo(
-    () => computeViewBox(zoneSeats, ZOOM_PADDING, 16),
+    () => computeViewBox(zoneSeats, ZOOM_PADDING_X, ZOOM_PADDING_Y, 16),
     [zoneSeats]
   );
 
@@ -479,21 +503,23 @@ export default function SeatMap({ showId, userId }) {
       {!selectedZone ? (
         <div className="zone-diagram-wrap">
           <svg viewBox={overviewViewBox} className="zone-diagram" role="group" aria-label="Select a zone">
-            <rect
-              x={stageRect.x}
-              y={stageRect.y}
-              width={stageRect.width}
-              height={stageRect.height}
-              rx="4"
-              className="zone-diagram-stage"
-            />
-            <text
-              x={stageRect.x + stageRect.width / 2}
-              y={stageRect.y + stageRect.height / 2}
-              className="zone-diagram-stage-label"
-            >
-              STAGE
-            </text>
+            <g className="zone-diagram-stage-group">
+              <rect
+                x={stageRect.x}
+                y={stageRect.y}
+                width={stageRect.width}
+                height={stageRect.height}
+                rx="4"
+                className="zone-diagram-stage"
+              />
+              <text
+                x={stageRect.x + stageRect.width / 2}
+                y={stageRect.y + stageRect.height / 2}
+                className="zone-diagram-stage-label"
+              >
+                STAGE
+              </text>
+            </g>
 
             {['A', 'B', 'C', 'D', 'E', 'F'].map(z => {
               const zSeats = seatsByZone[z] || [];
@@ -565,7 +591,7 @@ export default function SeatMap({ showId, userId }) {
                 </div>
                 <div className="zoom-pan-wrap">
                   <TransformComponent
-                    wrapperStyle={{ width: '100%', maxWidth: 500, margin: '0 auto' }}
+                    wrapperStyle={{ width: '100%' }}
                     contentStyle={{ width: '100%' }}
                   >
                     <svg viewBox={zoneViewBox} style={{ width: '100%', display: 'block', cursor: lockingSeatId ? 'wait' : 'default' }}>
@@ -616,7 +642,7 @@ export default function SeatMap({ showId, userId }) {
                                 cy={seat.pos_y}
                                 r={Math.max(SEAT_WIDTH, SEAT_HEIGHT) * 0.95}
                                 fill="none"
-                                stroke="#ffffff"
+                                stroke="var(--accent)"
                                 strokeWidth={1.5}
                                 className="my-seat-ring"
                               />
@@ -659,7 +685,14 @@ export default function SeatMap({ showId, userId }) {
       </div>
 
       {message && (
-        <p className={`message-toast message-${messageType}`} role="status" aria-live="polite">{message}</p>
+        <p
+          className={`message-toast message-${messageType}`}
+          role="status"
+          aria-live="polite"
+          style={{ top: toastTop }}
+        >
+          {message}
+        </p>
       )}
 
       <button
@@ -681,7 +714,7 @@ export default function SeatMap({ showId, userId }) {
       </button>
 
       {panelOpen && (
-        <div className="selection-backdrop" onClick={() => setPanelOpen(false)}>
+        <div className="selection-backdrop" onClick={() => { setPanelOpen(false); setConfirmingBooking(false); }}>
           <div
             className="selection-drawer"
             onClick={(e) => e.stopPropagation()}
@@ -691,7 +724,7 @@ export default function SeatMap({ showId, userId }) {
           >
             <button
               className="ticket-modal-close"
-              onClick={() => setPanelOpen(false)}
+              onClick={() => { setPanelOpen(false); setConfirmingBooking(false); }}
               aria-label="Close"
             >
               ✕
@@ -741,9 +774,39 @@ export default function SeatMap({ showId, userId }) {
               })}
             </ul>
 
-            <button className="btn btn-primary" onClick={handleConfirm} style={{ width: '100%' }} disabled={confirming}>
-              {confirming ? 'Confirming…' : 'Confirm booking'}
-            </button>
+            {!confirmingBooking ? (
+              <button
+                className="btn btn-primary"
+                onClick={() => setConfirmingBooking(true)}
+                style={{ width: '100%' }}
+              >
+                Confirm booking
+              </button>
+            ) : (
+              <div>
+                <p style={{ fontSize: 13, marginBottom: 8, textAlign: 'center' }}>
+                  Book {mySelections.length} seat{mySelections.length > 1 ? 's' : ''}? This can't be undone from here — you can cancel later from My Bookings.
+                </p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    className="btn"
+                    onClick={() => setConfirmingBooking(false)}
+                    disabled={confirming}
+                    style={{ flex: 1 }}
+                  >
+                    Go back
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleConfirm}
+                    disabled={confirming}
+                    style={{ flex: 1 }}
+                  >
+                    {confirming ? 'Confirming…' : 'Yes, confirm'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
