@@ -1,8 +1,10 @@
 // src/components/AdminView.jsx
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { useLanguage } from '../i18n';
 
 export default function AdminView({ showId, adminId }) {
+  const { t } = useLanguage();
   const [seats, setSeats] = useState([]);
   const [reservations, setReservations] = useState({});
   const [message, setMessage] = useState(null);
@@ -56,11 +58,11 @@ export default function AdminView({ showId, adminId }) {
     setReleasingId(null);
 
     if (error || !data?.success) {
-      setMessage('Could not release seat: ' + (data?.reason || 'error'));
+      setMessage(t('couldNotRelease') + (data?.reason || 'error'));
       return;
     }
 
-    setMessage('Seat released.');
+    setMessage(t('seatReleased'));
     loadData();
   }
 
@@ -90,39 +92,39 @@ export default function AdminView({ showId, adminId }) {
 
   return (
     <div>
-      <h2 className="section-heading">Seat occupancy</h2>
+      <h2 className="section-heading">{t('seatOccupancy')}</h2>
 
       {loading ? (
-        <p className="empty-state">Loading occupancy data…</p>
+        <p className="empty-state">{t('loadingOccupancy')}</p>
       ) : (
         <>
       <p className="admin-summary">
-        {confirmedCount} confirmed &middot; {lockedCount} currently held &middot; {total - confirmedCount - lockedCount} available &middot; {total} total
+        {confirmedCount} {t('confirmedCount')} &middot; {lockedCount} {t('heldCount')} &middot; {total - confirmedCount - lockedCount} {t('availableCount')} &middot; {total} {t('totalCount')}
       </p>
 
       <div className="admin-filters">
         <div className="field">
-          <label htmlFor="admin-zone" className="field-label">Zone</label>
+          <label htmlFor="admin-zone" className="field-label">{t('zoneLabel')}</label>
           <select
             id="admin-zone"
             className="admin-select"
             value={selectedZone}
             onChange={(e) => setSelectedZone(e.target.value)}
           >
-            <option value="all">All zones</option>
+            <option value="all">{t('allZones')}</option>
             {zones.map(z => (
-              <option key={z} value={z}>Zone {z}</option>
+              <option key={z} value={z}>{t('zone')} {z}</option>
             ))}
           </select>
         </div>
 
         <div className="field" style={{ flex: 1 }}>
-          <label htmlFor="admin-search" className="field-label">Search seat</label>
+          <label htmlFor="admin-search" className="field-label">{t('searchSeatLabel')}</label>
           <input
             id="admin-search"
             type="text"
             className="admin-search"
-            placeholder="e.g. B47"
+            placeholder={t('searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -134,17 +136,17 @@ export default function AdminView({ showId, adminId }) {
       {filteredSeats.length === 0 ? (
         <p className="empty-state">
           {Object.keys(reservations).length === 0
-            ? 'No seats held or booked yet.'
-            : 'No seats match this filter.'}
+            ? t('noSeatsHeldYet')
+            : t('noSeatsMatchFilter')}
         </p>
       ) : (
         <div className="admin-table-wrap">
         <table className="admin-table">
           <thead>
             <tr>
-              <th>Seat</th>
-              <th>Status</th>
-              <th>Held by</th>
+              <th>{t('seat')}</th>
+              <th>{t('status')}</th>
+              <th>{t('heldBy')}</th>
               <th></th>
             </tr>
           </thead>
@@ -156,12 +158,12 @@ export default function AdminView({ showId, adminId }) {
                   <td>{s.section}{s.seat_number}</td>
                   <td>
                     <span className={`status-badge status-${r.status}`}>{r.status}</span>
-                    {r.checked_in && <span className="status-badge status-checked-in" style={{ marginLeft: 6 }}>Checked in</span>}
+                    {r.checked_in && <span className="status-badge status-checked-in" style={{ marginLeft: 6 }}>{t('checkedIn')}</span>}
                   </td>
                   <td title={r.profiles?.email || r.user_id}>{r.profiles?.email || r.user_id}</td>
                   <td>
                     <button className="btn" onClick={() => handleRelease(s.id)} disabled={releasingId === s.id}>
-                      {releasingId === s.id ? 'Releasing…' : 'Release'}
+                      {releasingId === s.id ? t('releasing') : t('release')}
                     </button>
                   </td>
                 </tr>

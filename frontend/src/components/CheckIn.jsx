@@ -2,10 +2,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import QrScanner from 'qr-scanner';
 import { supabase } from '../lib/supabaseClient';
+import { useLanguage } from '../i18n';
 
 const SCAN_COOLDOWN_MS = 2000; // avoid re-processing the same code repeatedly while still in frame
 
 export default function CheckIn({ showId, adminId }) {
+  const { t } = useLanguage();
   const [code, setCode] = useState('');
   const [result, setResult] = useState(null);
   const [recent, setRecent] = useState([]);
@@ -31,7 +33,7 @@ export default function CheckIn({ showId, adminId }) {
     if (!error && data) {
       setRecent(
         data.map(r => ({
-          message: `Checked in — Seat ${r.seats.section}${r.seats.seat_number}`,
+          message: t('checkedInSeat', r.seats.section, r.seats.seat_number),
           time: new Date(r.checked_in_at).toLocaleTimeString(),
         }))
       );
@@ -63,21 +65,24 @@ export default function CheckIn({ showId, adminId }) {
     });
 
     if (error) {
-      showResult({ type: 'error', message: 'Scan failed — try again.' });
+      showResult({ type: 'error', message: t('scanFailed') });
       flashFeedback('error');
     } else if (!data?.success) {
       const messages = {
-        ticket_not_found: 'Ticket not found — check the code.',
-        wrong_show: 'This ticket is for a different show.',
-        already_checked_in: `Already checked in — Seat ${data.section}${data.seat_number}${
-          data.checked_in_at ? ' at ' + new Date(data.checked_in_at).toLocaleTimeString() : ''
-        }`,
-        not_authorized: 'Not authorized to check in tickets.',
+        ticket_not_found: t('ticketNotFound'),
+        wrong_show: t('wrongShow'),
+        already_checked_in: t(
+          'alreadyCheckedIn',
+          data.section,
+          data.seat_number,
+          data.checked_in_at ? new Date(data.checked_in_at).toLocaleTimeString() : null
+        ),
+        not_authorized: t('notAuthorized'),
       };
-      showResult({ type: 'error', message: messages[data?.reason] || 'Check-in failed.' });
+      showResult({ type: 'error', message: messages[data?.reason] || t('checkInFailed') });
       flashFeedback('error');
     } else {
-      const message = `Checked in — Seat ${data.section}${data.seat_number}`;
+      const message = t('checkedInSeat', data.section, data.seat_number);
       showResult({ type: 'success', message });
       loadRecent();
       flashFeedback('success');
@@ -142,7 +147,7 @@ export default function CheckIn({ showId, adminId }) {
     scannerRef.current = scanner;
 
     scanner.start().catch(() => {
-      setCameraError('Could not access camera — check permissions, or use manual entry.');
+      setCameraError(t('cameraAccessError'));
     });
 
     return () => {
@@ -153,9 +158,9 @@ export default function CheckIn({ showId, adminId }) {
 
   return (
     <div>
-      <h2 className="section-heading">Check-in</h2>
+      <h2 className="section-heading">{t('checkIn')}</h2>
       <p style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: -8, marginBottom: 16 }}>
-        Scan a ticket QR code with the camera, a USB/Bluetooth scanner, or type the code manually.
+        {t('checkInSubtitle')}
       </p>
 
       <div className="checkin-mode-toggle">
@@ -164,14 +169,14 @@ export default function CheckIn({ showId, adminId }) {
           onClick={() => setMode('camera')}
           style={{ color: mode === 'camera' ? 'var(--text)' : 'var(--text-dim)' }}
         >
-          Camera scan
+          {t('cameraScan')}
         </button>
         <button
           className="tab-btn"
           onClick={() => setMode('manual')}
           style={{ color: mode === 'manual' ? 'var(--text)' : 'var(--text-dim)' }}
         >
-          Manual / scanner input
+          {t('manualScannerInput')}
         </button>
       </div>
 
@@ -185,19 +190,19 @@ export default function CheckIn({ showId, adminId }) {
       {mode === 'manual' && (
         <form onSubmit={handleManualSubmit} className="checkin-form">
           <div className="field" style={{ flex: 1 }}>
-            <label htmlFor="checkin-code" className="field-label">Ticket code</label>
+            <label htmlFor="checkin-code" className="field-label">{t('ticketCode')}</label>
             <input
               id="checkin-code"
               ref={inputRef}
               type="text"
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              placeholder="Scan or enter ticket code"
+              placeholder={t('scanOrEnterCode')}
               autoComplete="off"
               className="checkin-input"
             />
           </div>
-          <button type="submit" className="btn btn-primary">Check in</button>
+          <button type="submit" className="btn btn-primary">{t('checkInBtn')}</button>
         </form>
       )}
 
@@ -213,7 +218,7 @@ export default function CheckIn({ showId, adminId }) {
 
       {recent.length > 0 && (
         <div style={{ marginTop: 20 }}>
-          <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 8 }}>Recent check-ins</p>
+          <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 8 }}>{t('recentCheckIns')}</p>
           <ul className="bookings-list">
             {recent.map((r, i) => (
               <li key={i} className="booking-item ticket-checked-in">

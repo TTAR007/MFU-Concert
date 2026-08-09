@@ -5,10 +5,12 @@ import SeatMap from './components/SeatMap';
 import MyBookings from './components/MyBookings';
 import AdminView from './components/AdminView';
 import CheckIn from './components/CheckIn';
+import { LanguageProvider } from './LanguageProvider';
+import { useLanguage } from './i18n';
 import './theme.css';
 
 const SHOW_ID = 'e8a7a715-c26a-4e05-8250-5c6ee79922df';
-const EVENT_NAME = 'MFU Band Concert 2026';
+const EVENT_NAME = 'MFU Concert 2026';
 
 const AVATAR_COLORS = ['#6366f1', '#22c55e', '#f5a623', '#ef4444', '#06b6d4', '#a855f7'];
 
@@ -45,7 +47,64 @@ function Avatar({ email }) {
   );
 }
 
+function ThaiFlag() {
+  return (
+    <svg viewBox="0 0 30 20" width="30" height="20" aria-hidden="true">
+      <rect width="30" height="20" fill="#A51931" />
+      <rect y="3.33" width="30" height="13.33" fill="#F4F5F8" />
+      <rect y="6.67" width="30" height="6.67" fill="#2D2A4A" />
+    </svg>
+  );
+}
+
+function UKFlag() {
+  return (
+    <svg viewBox="0 0 30 20" width="30" height="20" aria-hidden="true">
+      <rect width="30" height="20" fill="#00247D" />
+      <path d="M0,0 L30,20 M30,0 L0,20" stroke="#ffffff" strokeWidth="4" />
+      <path d="M0,0 L30,20 M30,0 L0,20" stroke="#CF142B" strokeWidth="1.5" />
+      <path d="M15,0 V20 M0,10 H30" stroke="#ffffff" strokeWidth="6" />
+      <path d="M15,0 V20 M0,10 H30" stroke="#CF142B" strokeWidth="3" />
+    </svg>
+  );
+}
+
+function LanguageToggle() {
+  const { lang, setLang } = useLanguage();
+  const switchingToThai = lang === 'en';
+
+  return (
+    <button
+      className="lang-toggle"
+      onClick={() => setLang(switchingToThai ? 'th' : 'en')}
+      aria-label={switchingToThai ? 'Switch to Thai' : 'Switch to English'}
+    >
+      <span className="lang-toggle-flag">
+        {switchingToThai ? <ThaiFlag /> : <UKFlag />}
+        <span className="lang-toggle-switch-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="17 1 21 5 17 9" />
+            <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+            <polyline points="7 23 3 19 7 15" />
+            <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+          </svg>
+        </span>
+      </span>
+      <span className="lang-toggle-abbr">{switchingToThai ? 'TH' : 'EN'}</span>
+    </button>
+  );
+}
+
 export default function App() {
+  return (
+    <LanguageProvider>
+      <AppInner />
+    </LanguageProvider>
+  );
+}
+
+function AppInner() {
+  const { t } = useLanguage();
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -107,7 +166,7 @@ export default function App() {
       .then(({ data }) => setProfile(data));
   }, [session]);
 
-  if (loading) return <div className="app-shell"><p>Loading...</p></div>;
+  if (loading) return <div className="app-shell"><p>{t('loading')}</p></div>;
 
   return (
     <div className="app-shell">
@@ -118,6 +177,7 @@ export default function App() {
             <div className="top-bar-row">
               <h1 className="event-title">{EVENT_NAME}</h1>
               <div className="top-bar-controls">
+                <LanguageToggle />
                 <div className="profile-wrap show-desktop-only" ref={profileWrapRef}>
                   <button
                     className="avatar-trigger"
@@ -136,7 +196,7 @@ export default function App() {
                         style={{ width: '100%' }}
                         onClick={() => { setProfileMenuOpen(false); supabase.auth.signOut(); }}
                       >
-                        Sign out
+                        {t('signOut')}
                       </button>
                     </div>
                   )}
@@ -168,7 +228,7 @@ export default function App() {
             <button
               className="ticket-modal-close show-mobile-only"
               onClick={() => setMenuOpen(false)}
-              aria-label="Close menu"
+              aria-label={t('closeMenu')}
             >
               ✕
             </button>
@@ -181,14 +241,14 @@ export default function App() {
               onClick={() => { setView('seats'); setMenuOpen(false); }}
               aria-current={view === 'seats' ? 'page' : undefined}
             >
-              Seat Map
+              {t('seatMap')}
             </button>
             <button
               className={`tab-btn ${view === 'bookings' ? 'active' : ''}`}
               onClick={() => { setView('bookings'); setMenuOpen(false); }}
               aria-current={view === 'bookings' ? 'page' : undefined}
             >
-              My Bookings
+              {t('myBookings')}
             </button>
             {profile?.is_admin && (
               <button
@@ -196,7 +256,7 @@ export default function App() {
                 onClick={() => { setView('admin'); setMenuOpen(false); }}
                 aria-current={view === 'admin' ? 'page' : undefined}
               >
-                Admin
+                {t('admin')}
               </button>
             )}
             {profile?.is_admin && (
@@ -205,14 +265,14 @@ export default function App() {
                 onClick={() => { setView('checkin'); setMenuOpen(false); }}
                 aria-current={view === 'checkin' ? 'page' : undefined}
               >
-                Check-in
+                {t('checkIn')}
               </button>
             )}
             <button
               className="tab-btn show-mobile-only"
               onClick={() => { setMenuOpen(false); supabase.auth.signOut(); }}
             >
-              Sign out
+              {t('signOut')}
             </button>
           </nav>
 
@@ -228,13 +288,19 @@ export default function App() {
           </main>
         </>
       ) : (
-        <AuthForm eventName={EVENT_NAME} />
+        <>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 8 }}>
+            <LanguageToggle />
+          </div>
+          <AuthForm eventName={EVENT_NAME} />
+        </>
       )}
     </div>
   );
 }
 
 function AuthForm({ eventName }) {
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -250,7 +316,7 @@ function AuthForm({ eventName }) {
     setSignupSuccess(false);
 
     if (mode === 'signup' && password !== confirmPassword) {
-      setError('Passwords do not match.');
+      setError(t('passwordsNoMatch'));
       return;
     }
 
@@ -312,7 +378,7 @@ function AuthForm({ eventName }) {
   return (
     <div className="auth-wrap">
       <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 4 }}>{eventName}</p>
-      <h2>{mode === 'login' ? 'Log in' : 'Sign up'}</h2>
+      <h2>{mode === 'login' ? t('logIn') : t('signUp')}</h2>
 
       <button className="btn google-signin-btn" onClick={handleGoogleSignIn} type="button" disabled={busy}>
         <svg viewBox="0 0 24 24" width="18" height="18">
@@ -321,14 +387,14 @@ function AuthForm({ eventName }) {
           <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
           <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
         </svg>
-        {googleSubmitting ? 'Connecting…' : 'Continue with Google'}
+        {googleSubmitting ? t('connecting') : t('continueWithGoogle')}
       </button>
 
-      <div className="auth-divider"><span>or</span></div>
+      <div className="auth-divider"><span>{t('or')}</span></div>
 
       <form onSubmit={handleSubmit} className="auth-form" noValidate>
         <div className="field">
-          <label htmlFor="auth-email" className="field-label">Email</label>
+          <label htmlFor="auth-email" className="field-label">{t('email')}</label>
           <input
             id="auth-email"
             type="email"
@@ -341,11 +407,11 @@ function AuthForm({ eventName }) {
           />
         </div>
         <div className="field">
-          <label htmlFor="auth-password" className="field-label">Password</label>
+          <label htmlFor="auth-password" className="field-label">{t('password')}</label>
           <input
             id="auth-password"
             type="password"
-            placeholder="At least 6 characters"
+            placeholder={t('passwordHint')}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -356,11 +422,11 @@ function AuthForm({ eventName }) {
         </div>
         {mode === 'signup' && (
           <div className="field">
-            <label htmlFor="auth-confirm-password" className="field-label">Confirm password</label>
+            <label htmlFor="auth-confirm-password" className="field-label">{t('confirmPassword')}</label>
             <input
               id="auth-confirm-password"
               type="password"
-              placeholder="Re-enter your password"
+              placeholder={t('reenterPassword')}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
@@ -371,17 +437,17 @@ function AuthForm({ eventName }) {
           </div>
         )}
         <button type="submit" className="btn btn-primary" disabled={busy}>
-          {submitting ? (mode === 'login' ? 'Logging in…' : 'Signing up…') : (mode === 'login' ? 'Log in' : 'Sign up')}
+          {submitting ? (mode === 'login' ? t('loggingIn') : t('signingUp')) : (mode === 'login' ? t('logIn') : t('signUp'))}
         </button>
       </form>
       {signupSuccess && (
         <p className="auth-success" role="status">
-          Account created! Check <strong>{email}</strong> for a confirmation email — if you don't see it within a minute or two, check your <strong>spam/junk folder</strong> too. Log in once you've confirmed.
+          {t('accountCreated')} <strong>{email}</strong> {t('forConfirmation')} <strong>{t('spamFolder')}</strong> {t('tooThenLogIn')}
         </p>
       )}
       {error && <p className="auth-error" role="alert">{error}</p>}
       <p className="auth-switch">
-        {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
+        {mode === 'login' ? t('noAccount') : t('haveAccount')}
         <button
           className="btn-text"
           onClick={() => {
@@ -391,7 +457,7 @@ function AuthForm({ eventName }) {
             setSignupSuccess(false);
           }}
         >
-          {mode === 'login' ? 'Sign up' : 'Log in'}
+          {mode === 'login' ? t('signUp') : t('logIn')}
         </button>
       </p>
     </div>

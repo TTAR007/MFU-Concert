@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { supabase } from '../lib/supabaseClient';
+import { useLanguage } from '../i18n';
 
 const SEAT_WIDTH = 8;
 const SEAT_HEIGHT = 7;
@@ -12,6 +13,7 @@ const ZOOM_PADDING_X = 25; // horizontal margin around a zone's seats when zoome
 const ZOOM_PADDING_Y = 70; // vertical margin (top/bottom)
 
 export default function SeatMap({ showId, userId }) {
+  const { t } = useLanguage();
   const [seats, setSeats] = useState([]);
   const [reservations, setReservations] = useState({});
   const [mySelections, setMySelections] = useState([]);
@@ -122,7 +124,7 @@ export default function SeatMap({ showId, userId }) {
               const wasMine = next[payload.old.seat_id]?.user_id === userId;
               delete next[payload.old.seat_id];
               if (wasMine) {
-                showMessage('One of your held seats expired and was released.', 'info');
+                showMessage(t('seatExpiredReleased'), 'info');
               }
             } else {
               const row = payload.new;
@@ -178,7 +180,7 @@ export default function SeatMap({ showId, userId }) {
     if (status !== 'available' || lockingSeatId) return;
 
     if (mySelections.length >= 4) {
-      showMessage('You can only select up to 4 seats.', 'error');
+      showMessage(t('capReached'), 'error');
       return;
     }
 
@@ -192,9 +194,9 @@ export default function SeatMap({ showId, userId }) {
     if (error || !data?.success) {
       const reason = data?.reason || 'error';
       showMessage(
-        reason === 'seat_taken' ? 'That seat was just taken by someone else.' :
-        reason === 'cap_reached' ? 'You already hold 4 seats.' :
-        'Could not select that seat. Please try again.',
+        reason === 'seat_taken' ? t('seatTaken') :
+        reason === 'cap_reached' ? t('capReached') :
+        t('seatSelectError'),
         'error'
       );
       return;
@@ -216,7 +218,7 @@ export default function SeatMap({ showId, userId }) {
     setRemovingId(null);
 
     if (error || !data?.success) {
-      showMessage('Could not remove that seat. Please try again.', 'error');
+      showMessage(t('removeSeatError'), 'error');
       return;
     }
 
@@ -243,14 +245,14 @@ export default function SeatMap({ showId, userId }) {
       setConfirming(false);
       setConfirmingBooking(false);
       showMessage(
-        'Could not confirm — your hold(s) may have expired. Please reselect your seats.',
+        t('confirmExpiredError'),
         'error'
       );
       await loadData();
       return;
     }
 
-    showMessage(`Booked ${data.confirmed_count} seat(s)!`, 'success');
+    showMessage(t('bookedNSeats', data.confirmed_count), 'success');
     setMySelections([]);
     setPanelOpen(false);
     setConfirmingBooking(false);
@@ -481,25 +483,25 @@ export default function SeatMap({ showId, userId }) {
   return (
     <div className="seat-map-wrap">
       <details className="booking-rules">
-        <summary>How booking works</summary>
+        <summary>{t('howBookingWorks')}</summary>
         <ul>
-          <li>Tap a zone below to view and select its seats.</li>
-          <li>You can hold up to <strong>4 seats</strong> at a time.</li>
-          <li>Held seats are reserved for <strong>10 minutes</strong> — confirm before time runs out or they're released automatically.</li>
-          <li>Tap the ticket icon (bottom right) anytime to review your held seats and confirm your booking.</li>
-          <li><span className="rules-swatch" style={{ background: 'var(--available)' }} /> Available &nbsp;
-              <span className="rules-swatch" style={{ background: 'var(--spotlight)' }} /> Held by others &nbsp;
-              <span className="rules-swatch" style={{ background: 'var(--stage-glow)' }} /> Held by you &nbsp;
-              <span className="rules-swatch" style={{ background: 'var(--taken)' }} /> Booked &nbsp;
-              <span className="rules-swatch" style={{ background: 'var(--success)' }} /> Checked in</li>
+          <li>{t('ruleTapZone')}</li>
+          <li>{t('ruleFourSeats')}</li>
+          <li>{t('ruleTenMinutes')}</li>
+          <li>{t('ruleTicketIcon')}</li>
+          <li><span className="rules-swatch" style={{ background: 'var(--available)' }} /> {t('legendAvailable')} &nbsp;
+              <span className="rules-swatch" style={{ background: 'var(--spotlight)' }} /> {t('legendLockedOthers')} &nbsp;
+              <span className="rules-swatch" style={{ background: 'var(--stage-glow)' }} /> {t('legendMine')} &nbsp;
+              <span className="rules-swatch" style={{ background: 'var(--taken)' }} /> {t('legendBooked')} &nbsp;
+              <span className="rules-swatch" style={{ background: 'var(--success)' }} /> {t('legendCheckedIn')}</li>
         </ul>
       </details>
 
-      <h2 className="section-heading" style={{ textAlign: 'center' }}>C4 Building</h2>
+      <h2 className="section-heading" style={{ textAlign: 'center' }}>{t('building')}</h2>
 
       {showExpiryWarning && (
         <p className="expiry-warning">
-          Your held seat(s) expire in {secondsLeft}s — confirm soon!
+          {t('expiryWarning', secondsLeft)}
         </p>
       )}
 
@@ -551,7 +553,7 @@ export default function SeatMap({ showId, userId }) {
                   }}
                   role="button"
                   tabIndex={stat.total > 0 ? 0 : -1}
-                  aria-label={`Zone ${z}, ${full ? 'full' : stat.available + ' seats available'}`}
+                  aria-label={`${t('zone')} ${z}, ${full ? t('full') : stat.available + ' ' + t('available')}`}
                 >
                   <polygon points={zoneOutline(zSeats)} fill={ZONE_COLORS[z]} />
                   <text x={centroid.x} y={centroid.y}>{z}</text>
@@ -564,10 +566,10 @@ export default function SeatMap({ showId, userId }) {
         <>
           <div className="zone-detail-header">
             <button className="btn btn-text" onClick={() => setSelectedZone(null)}>
-              ← Back to zones
+              ← {t('backToZones')}
             </button>
           </div>
-          <p className="zone-detail-title">Zone {selectedZone}</p>
+          <p className="zone-detail-title">{t('zone')} {selectedZone}</p>
 
           <TransformWrapper
             initialScale={1}
@@ -616,11 +618,11 @@ export default function SeatMap({ showId, userId }) {
                         const clickable = status === 'available' && !atCap && !lockingSeatId;
                         const style = glow[status];
                         const mine = (status === 'confirmed' || status === 'checked_in') && isMyReservation(seat.id);
-                        const label = `Seat ${seat.section}${seat.seat_number} — ${
-                          status === 'checked_in' ? 'checked in' :
-                          status === 'available' && atCap ? 'available, but selection limit reached' :
+                        const label = `${t('seat')} ${seat.section}${seat.seat_number} — ${
+                          status === 'checked_in' ? t('checkedIn') :
+                          status === 'available' && atCap ? `${t('available')}, ${t('limitReached')}` :
                           status
-                        }${mine ? ' — this is your seat' : ''}`;
+                        }${mine ? ` — ${t('yourSeat')}` : ''}`;
                         return (
                           <g
                             key={seat.id}
@@ -679,12 +681,12 @@ export default function SeatMap({ showId, userId }) {
       )}
 
       <div className="legend">
-        <span className="legend-item"><span className="legend-dot" style={{ background: 'var(--available)' }} />Available</span>
-        <span className="legend-item"><span className="legend-dot" style={{ background: 'var(--spotlight)' }} />Held by others</span>
-        <span className="legend-item"><span className="legend-dot" style={{ background: 'var(--stage-glow)' }} />Held by you</span>
-        <span className="legend-item"><span className="legend-dot" style={{ background: 'var(--taken)' }} />Booked</span>
-        <span className="legend-item"><span className="legend-dot" style={{ background: 'var(--success)' }} />Checked in</span>
-        <span className="legend-item"><span className="legend-dot legend-ring" />Your booked seat</span>
+        <span className="legend-item"><span className="legend-dot" style={{ background: 'var(--available)' }} />{t('legendAvailable')}</span>
+        <span className="legend-item"><span className="legend-dot" style={{ background: 'var(--spotlight)' }} />{t('legendLockedOthers')}</span>
+        <span className="legend-item"><span className="legend-dot" style={{ background: 'var(--stage-glow)' }} />{t('legendMine')}</span>
+        <span className="legend-item"><span className="legend-dot" style={{ background: 'var(--taken)' }} />{t('legendBooked')}</span>
+        <span className="legend-item"><span className="legend-dot" style={{ background: 'var(--success)' }} />{t('legendCheckedIn')}</span>
+        <span className="legend-item"><span className="legend-dot legend-ring" />{t('legendYourSeat')}</span>
       </div>
 
       {message && (
@@ -704,8 +706,8 @@ export default function SeatMap({ showId, userId }) {
         aria-expanded={panelOpen}
         aria-label={
           mySelections.length > 0
-            ? `${mySelections.length} seats selected, view your tickets`
-            : 'No seats selected yet'
+            ? `${mySelections.length} ${t('seatsSelectedOf')}`
+            : t('noSeatsYet')
         }
         disabled={mySelections.length === 0}
       >
@@ -735,8 +737,8 @@ export default function SeatMap({ showId, userId }) {
 
             <div className="selection-drawer-header">
               <span className="selection-count">
-                {mySelections.length} of 4 seats selected
-                {mySelections.length >= 4 && ' — limit reached'}
+                {mySelections.length} {t('seatsSelectedOf')}
+                {mySelections.length >= 4 && ` ${t('limitReached')}`}
               </span>
             </div>
 
@@ -748,7 +750,7 @@ export default function SeatMap({ showId, userId }) {
                 return (
                   <li key={id} className="ticket-stub">
                     <div className="ticket-stub-main">
-                      <span className="ticket-stub-eyebrow">SEAT</span>
+                      <span className="ticket-stub-eyebrow">{t('seat').toUpperCase()}</span>
                       <span className="ticket-stub-number">{seat.section}{seat.seat_number}</span>
                     </div>
                     <div className="ticket-stub-perforation" aria-hidden="true">
@@ -758,7 +760,7 @@ export default function SeatMap({ showId, userId }) {
                     <button
                       className="ticket-stub-remove"
                       onClick={() => handleRelease(id)}
-                      aria-label={`Remove seat ${seat.section}${seat.seat_number}`}
+                      aria-label={`${t('seat')} ${seat.section}${seat.seat_number}`}
                       disabled={isRemoving || confirming}
                     >
                       {isRemoving ? (
@@ -783,12 +785,12 @@ export default function SeatMap({ showId, userId }) {
                 onClick={() => setConfirmingBooking(true)}
                 style={{ width: '100%' }}
               >
-                Confirm booking
+                {t('confirmBooking')}
               </button>
             ) : (
               <div>
                 <p style={{ fontSize: 13, marginBottom: 8, textAlign: 'center' }}>
-                  Book {mySelections.length} seat{mySelections.length > 1 ? 's' : ''}? This can't be undone from here — you can cancel later from My Bookings.
+                  {t('bookNSeats', mySelections.length)}
                 </p>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
@@ -797,7 +799,7 @@ export default function SeatMap({ showId, userId }) {
                     disabled={confirming}
                     style={{ flex: 1 }}
                   >
-                    Go back
+                    {t('goBack')}
                   </button>
                   <button
                     className="btn btn-primary"
@@ -805,7 +807,7 @@ export default function SeatMap({ showId, userId }) {
                     disabled={confirming}
                     style={{ flex: 1 }}
                   >
-                    {confirming ? 'Confirming…' : 'Yes, confirm'}
+                    {confirming ? t('confirming') : t('yesConfirm')}
                   </button>
                 </div>
               </div>

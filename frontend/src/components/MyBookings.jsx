@@ -2,8 +2,10 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../lib/supabaseClient';
+import { useLanguage } from '../i18n';
 
 export default function MyBookings({ showId, userId }) {
+  const { t } = useLanguage();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTicket, setActiveTicket] = useState(null); // the booking object currently shown in overlay
@@ -121,17 +123,17 @@ export default function MyBookings({ showId, userId }) {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [activeTicket, closeTicket]);
 
-  if (loading) return <p className="empty-state">Loading your bookings...</p>;
+  if (loading) return <p className="empty-state">{t('loadingBookings')}</p>;
 
   if (bookings.length === 0) {
-    return <p className="empty-state">No confirmed seats yet. Head to the Seat Map to grab one.</p>;
+    return <p className="empty-state">{t('noBookingsYetFull')}</p>;
   }
 
   return (
     <div>
-      <h2 className="section-heading">Your seats</h2>
+      <h2 className="section-heading">{t('yourSeats')}</h2>
       <p style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: -8, marginBottom: 16 }}>
-        Tap a ticket to show its QR code at entry.
+        {t('tapTicketHint')}
       </p>
       <ul className="bookings-list">
         {bookings.map(b => (
@@ -150,9 +152,9 @@ export default function MyBookings({ showId, userId }) {
             style={{ cursor: 'pointer' }}
           >
             <div className="ticket-stub-main">
-              <span className="ticket-stub-eyebrow">SEAT</span>
+              <span className="ticket-stub-eyebrow">{t('seat').toUpperCase()}</span>
               <span className="ticket-stub-number">{b.seats.section}{b.seats.seat_number}</span>
-              {b.checked_in && <span className="status-badge status-checked-in" style={{ marginTop: 4, alignSelf: 'flex-start' }}>Checked in</span>}
+              {b.checked_in && <span className="status-badge status-checked-in" style={{ marginTop: 4, alignSelf: 'flex-start' }}>{t('checkedIn')}</span>}
             </div>
             <div className="ticket-stub-perforation" aria-hidden="true">
               <span className="ticket-stub-notch ticket-stub-notch-top" />
@@ -165,7 +167,7 @@ export default function MyBookings({ showId, userId }) {
                 <rect x="3" y="14" width="7" height="7" />
                 <path d="M14 14h3v3h-3zM19 14h2v2h-2zM14 19h2v2h-2zM19 19h2v2h-2z" />
               </svg>
-              <span className="ticket-stub-view-label">View</span>
+              <span className="ticket-stub-view-label">{t('view')}</span>
             </div>
           </li>
         ))}
@@ -188,78 +190,78 @@ export default function MyBookings({ showId, userId }) {
             >
               ✕
             </button>
-            <p id="ticket-modal-heading" className="section-heading" style={{ marginBottom: 4 }}>
-              Seat {activeTicket.seats.section}{activeTicket.seats.seat_number}
-            </p>
-            <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>
-              Zone {activeTicket.seats.section} &middot; Row {activeTicket.seats.row_number}
-            </p>
-            {activeTicket.checked_in && (
-              <p style={{ marginBottom: 12 }}>
-                <span className="status-badge status-checked-in">Checked in</span>
+            <div className="ticket-modal-content">
+              <p id="ticket-modal-heading" className="section-heading" style={{ marginBottom: 4 }}>
+                {t('seat')} {activeTicket.seats.section}{activeTicket.seats.seat_number}
               </p>
-            )}
+              <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>
+                {t('zone')} {activeTicket.seats.section} &middot; {t('row')} {activeTicket.seats.row_number}
+              </p>
 
-            {!zoneMapLoading && zoneMapSeats.length > 0 && (
-              <div className="find-seat-map">
-                <svg viewBox={findSeatViewBox} className="find-seat-svg" aria-hidden="true">
-                  {findSeatRowLabels.map(rl => (
-                    <text
-                      key={rl.rowNumber}
-                      x={rl.x}
-                      y={rl.y}
-                      className="row-label find-seat-row-label"
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                    >
-                      {rl.rowNumber}
-                    </text>
-                  ))}
-                  {zoneMapSeats.map(s => (
-                    <circle
-                      key={s.id}
-                      cx={s.pos_x}
-                      cy={s.pos_y}
-                      r={s.id === activeTicket.seat_id ? 10 : 4}
-                      fill={s.id === activeTicket.seat_id ? 'var(--accent)' : 'var(--border)'}
-                      className={s.id === activeTicket.seat_id ? 'find-seat-highlight' : ''}
-                    />
-                  ))}
-                </svg>
-              </div>
-            )}
-
-            {activeTicket.ticket_code && (
-              <div className="ticket-qr-large">
-                <QRCodeSVG value={activeTicket.ticket_code} size={220} bgColor="#ffffff" fgColor="#000000" />
-              </div>
-            )}
-            <p style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 12, marginBottom: 16 }}>
-              Show this at entry
-            </p>
-
-            {!confirmingCancel ? (
-              <button className="btn-text" style={{ color: 'var(--taken)' }} onClick={() => setConfirmingCancel(true)}>
-                Cancel booking
-              </button>
-            ) : (
-              <div>
-                <p style={{ fontSize: 13, marginBottom: 8 }}>Cancel this seat? This can't be undone.</p>
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-                  <button className="btn" onClick={() => setConfirmingCancel(false)} disabled={cancelling}>
-                    Keep it
-                  </button>
-                  <button
-                    className="btn"
-                    style={{ background: 'var(--taken)', color: '#fff', borderColor: 'var(--taken)' }}
-                    onClick={handleCancelBooking}
-                    disabled={cancelling}
-                  >
-                    {cancelling ? 'Cancelling…' : 'Yes, cancel'}
-                  </button>
+              {!zoneMapLoading && zoneMapSeats.length > 0 && (
+                <div className="find-seat-map">
+                  <svg viewBox={findSeatViewBox} className="find-seat-svg" aria-hidden="true">
+                    {findSeatRowLabels.map(rl => (
+                      <text
+                        key={rl.rowNumber}
+                        x={rl.x}
+                        y={rl.y}
+                        className="row-label find-seat-row-label"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                      >
+                        {rl.rowNumber}
+                      </text>
+                    ))}
+                    {zoneMapSeats.map(s => (
+                      <circle
+                        key={s.id}
+                        cx={s.pos_x}
+                        cy={s.pos_y}
+                        r={s.id === activeTicket.seat_id ? 10 : 4}
+                        fill={s.id === activeTicket.seat_id ? 'var(--accent)' : 'var(--border)'}
+                        className={s.id === activeTicket.seat_id ? 'find-seat-highlight' : ''}
+                      />
+                    ))}
+                  </svg>
                 </div>
-              </div>
-            )}
+              )}
+
+              {activeTicket.ticket_code && (
+                <div className="ticket-qr-large">
+                  <QRCodeSVG value={activeTicket.ticket_code} size={220} bgColor="#ffffff" fgColor="#000000" />
+                  {activeTicket.checked_in && (
+                    <span className="status-badge status-checked-in qr-checked-in-badge">{t('checkedIn')}</span>
+                  )}
+                </div>
+              )}
+              <p style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 12, marginBottom: 16 }}>
+                {t('showAtEntry')}
+              </p>
+
+              {!confirmingCancel ? (
+                <button className="btn-text" style={{ color: 'var(--taken)' }} onClick={() => setConfirmingCancel(true)}>
+                  {t('cancelBooking')}
+                </button>
+              ) : (
+                <div>
+                  <p style={{ fontSize: 13, marginBottom: 8 }}>{t('cancelConfirmText')}</p>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                    <button className="btn" onClick={() => setConfirmingCancel(false)} disabled={cancelling}>
+                      {t('keepIt')}
+                    </button>
+                    <button
+                      className="btn"
+                      style={{ background: 'var(--taken)', color: '#fff', borderColor: 'var(--taken)' }}
+                      onClick={handleCancelBooking}
+                      disabled={cancelling}
+                    >
+                      {cancelling ? t('cancelling') : t('yesCancel')}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
