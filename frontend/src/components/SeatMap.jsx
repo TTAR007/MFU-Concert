@@ -16,7 +16,7 @@ export default function SeatMap({ showId, userId }) {
   const [reservations, setReservations] = useState({});
   const [mySelections, setMySelections] = useState([]);
   const [message, setMessage] = useState(null);
-  const [toastTop, setToastTop] = useState(16);
+  const [toastPos, setToastPos] = useState({ top: '50%', left: '50%' });
   const [messageType, setMessageType] = useState('info');
   const [now, setNow] = useState(Date.now());
   const [selectedZone, setSelectedZone] = useState(null); // null = zone overview screen
@@ -43,15 +43,18 @@ export default function SeatMap({ showId, userId }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Keep the toast anchored to the true visible screen area, not the full page —
-  // browser pinch-zoom can otherwise leave position:fixed elements off-screen
-  // once the user scrolls a zoomed-in page.
+  // Keep the toast anchored to the true center of the visible screen area, not the
+  // full page — browser pinch-zoom can otherwise leave position:fixed elements
+  // off-screen or off-center once the user scrolls/zooms.
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv) return; // fallback: CSS position:fixed default (top: 16px) still applies
+    if (!vv) return; // fallback: CSS position:fixed default (centered via CSS) still applies
 
     function updateToastPosition() {
-      setToastTop(vv.offsetTop + 16);
+      setToastPos({
+        top: vv.offsetTop + vv.height / 2,
+        left: vv.offsetLeft + vv.width / 2,
+      });
     }
     updateToastPosition();
     vv.addEventListener('resize', updateToastPosition);
@@ -689,7 +692,7 @@ export default function SeatMap({ showId, userId }) {
           className={`message-toast message-${messageType}`}
           role="status"
           aria-live="polite"
-          style={{ top: toastTop }}
+          style={{ top: toastPos.top, left: toastPos.left }}
         >
           {message}
         </p>

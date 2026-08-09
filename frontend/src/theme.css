@@ -252,7 +252,7 @@ h1, h2, h3, .section-heading, .event-title, .zone-detail-title,
 .message-success { background: rgba(16, 185, 129, 0.12); color: #6EE7B7; }
 
 .message-toast {
-  position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
   text-align: center; padding: 10px 20px; border-radius: var(--radius-full);
   font-size: 13px; font-weight: 600; max-width: 90vw; width: max-content;
   box-shadow: var(--shadow-md); z-index: 400; background: var(--surface-raised); border: 1px solid var(--border);
