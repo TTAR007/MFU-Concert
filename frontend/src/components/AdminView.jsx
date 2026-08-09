@@ -1,5 +1,5 @@
 // src/components/AdminView.jsx
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useLanguage } from '../i18n';
 
@@ -8,10 +8,82 @@ export default function AdminView({ showId, adminId }) {
   const [seats, setSeats] = useState([]);
   const [reservations, setReservations] = useState({});
   const [message, setMessage] = useState(null);
+  const messageTimeoutRef = useRef(null);
+  const [toastPos, setToastPos] = useState({ top: '50%', left: '50%' });
+  const [viewingSeatId, setViewingSeatId] = useState(null);
+
+  // Group already-loaded seats by zone for the mini-map — no extra fetch needed.
+  const seatsByZone = useMemo(() => {
+    const groups = {};
+    seats.forEach(s => {
+      if (!groups[s.section]) groups[s.section] = [];
+      groups[s.section].push(s);
+    });
+    return groups;
+  }, [seats]);
+
+  function buildMiniMap(seat) {
+    const zoneSeats = seatsByZone[seat.section] || [];
+    if (zoneSeats.length === 0) return null;
+    const xs = zoneSeats.map(s => s.pos_x);
+    const ys = zoneSeats.map(s => s.pos_y);
+    const pad = 15;
+    const minX = Math.min(...xs) - pad;
+    const minY = Math.min(...ys) - pad;
+    const width = Math.max(...xs) - Math.min(...xs) + pad * 2;
+    const height = Math.max(...ys) - Math.min(...ys) + pad * 2;
+    return { zoneSeats, viewBox: `${minX} ${minY} ${width} ${height}` };
+  }
+
+  function showMessage(text, autoClearMs = 4000) {
+    if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current);
+    setMessage(text);
+    if (text) {
+      messageTimeoutRef.current = setTimeout(() => setMessage(null), autoClearMs);
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!viewingSeatId) return;
+    function handleEscape(e) {
+      if (e.key === 'Escape') setViewingSeatId(null);
+    }
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [viewingSeatId]);
+
+  // Keep the message anchored to the true center of the visible screen area,
+  // not the full page — browser pinch-zoom can otherwise leave position:fixed
+  // elements off-screen or off-center once the user scrolls/zooms.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    function updateToastPosition() {
+      setToastPos({
+        top: vv.offsetTop + vv.height / 2,
+        left: vv.offsetLeft + vv.width / 2,
+      });
+    }
+    updateToastPosition();
+    vv.addEventListener('resize', updateToastPosition);
+    vv.addEventListener('scroll', updateToastPosition);
+    return () => {
+      vv.removeEventListener('resize', updateToastPosition);
+      vv.removeEventListener('scroll', updateToastPosition);
+    };
+  }, []);
   const [selectedZone, setSelectedZone] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [releasingId, setReleasingId] = useState(null);
+  const [confirmingReleaseId, setConfirmingReleaseId] = useState(null);
 
   async function fetchAllRows(query) {
     const pageSize = 1000;
@@ -51,6 +123,7 @@ export default function AdminView({ showId, adminId }) {
 
   async function handleRelease(seatId) {
     setReleasingId(seatId);
+    setConfirmingReleaseId(null);
     const { data, error } = await supabase.rpc('release_seat', {
       p_seat_id: seatId,
       p_admin_id: adminId,
@@ -58,11 +131,11 @@ export default function AdminView({ showId, adminId }) {
     setReleasingId(null);
 
     if (error || !data?.success) {
-      setMessage(t('couldNotRelease') + (data?.reason || 'error'));
+      showMessage(t('couldNotRelease') + (data?.reason || 'error'));
       return;
     }
 
-    setMessage(t('seatReleased'));
+    showMessage(t('seatReleased'));
     loadData();
   }
 
@@ -131,7 +204,16 @@ export default function AdminView({ showId, adminId }) {
         </div>
       </div>
 
-      {message && <p className="message-banner message-info" role="status" aria-live="polite">{message}</p>}
+      {message && (
+        <p
+          className="message-toast message-info"
+          role="status"
+          aria-live="polite"
+          style={{ top: toastPos.top, left: toastPos.left }}
+        >
+          {message}
+        </p>
+      )}
 
       {filteredSeats.length === 0 ? (
         <p className="empty-state">
@@ -148,6 +230,7 @@ export default function AdminView({ showId, adminId }) {
               <th>{t('status')}</th>
               <th>{t('heldBy')}</th>
               <th></th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -161,9 +244,38 @@ export default function AdminView({ showId, adminId }) {
                     {r.checked_in && <span className="status-badge status-checked-in" style={{ marginLeft: 6 }}>{t('checkedIn')}</span>}
                   </td>
                   <td title={r.profiles?.email || r.user_id}>{r.profiles?.email || r.user_id}</td>
+                  <td className={confirmingReleaseId === s.id ? 'admin-table-cell-wide' : ''}>
+                    {confirmingReleaseId === s.id ? (
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{t('confirmReleaseShort')}</span>
+                        <button className="btn" onClick={() => setConfirmingReleaseId(null)} disabled={releasingId === s.id}>
+                          {t('cancel')}
+                        </button>
+                        <button
+                          className="btn"
+                          style={{ background: 'var(--taken)', color: '#fff', borderColor: 'var(--taken)' }}
+                          onClick={() => handleRelease(s.id)}
+                          disabled={releasingId === s.id}
+                        >
+                          {releasingId === s.id ? t('releasing') : t('yesRelease')}
+                        </button>
+                      </div>
+                    ) : (
+                      <button className="btn" onClick={() => setConfirmingReleaseId(s.id)}>
+                        {t('release')}
+                      </button>
+                    )}
+                  </td>
                   <td>
-                    <button className="btn" onClick={() => handleRelease(s.id)} disabled={releasingId === s.id}>
-                      {releasingId === s.id ? t('releasing') : t('release')}
+                    <button
+                      className="btn admin-eye-btn"
+                      onClick={() => setViewingSeatId(s.id)}
+                      aria-label={t('viewSeatLocation')}
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
                     </button>
                   </td>
                 </tr>
@@ -175,6 +287,55 @@ export default function AdminView({ showId, adminId }) {
       )}
       </>
       )}
+
+      {viewingSeatId && (() => {
+        const seat = seats.find(s => s.id === viewingSeatId);
+        if (!seat) return null;
+        const miniMap = buildMiniMap(seat);
+        return (
+          <div className="ticket-overlay" onClick={() => setViewingSeatId(null)}>
+            <div
+              className="ticket-modal"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label={`${t('zone')} ${seat.section}`}
+            >
+              <button
+                className="ticket-modal-close"
+                onClick={() => setViewingSeatId(null)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+              <div className="ticket-modal-content">
+                <p className="section-heading" style={{ marginBottom: 4 }}>
+                  {t('zone')} {seat.section}
+                </p>
+                <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>
+                  {t('seat')} {seat.section}{seat.seat_number} &middot; {t('row')} {seat.row_number}
+                </p>
+                {miniMap && (
+                  <div className="find-seat-map">
+                    <svg viewBox={miniMap.viewBox} className="find-seat-svg" aria-hidden="true">
+                      {miniMap.zoneSeats.map(zs => (
+                        <circle
+                          key={zs.id}
+                          cx={zs.pos_x}
+                          cy={zs.pos_y}
+                          r={zs.id === seat.id ? 10 : 4}
+                          fill={zs.id === seat.id ? 'var(--accent)' : 'var(--border)'}
+                          className={zs.id === seat.id ? 'find-seat-highlight' : ''}
+                        />
+                      ))}
+                    </svg>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

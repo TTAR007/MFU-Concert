@@ -462,6 +462,10 @@ h1, h2, h3, .section-heading, .event-title, .zone-detail-title,
 .admin-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); padding: var(--space-sm) 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .admin-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 
+.admin-table-cell-wide { white-space: normal !important; max-width: none !important; overflow: visible !important; min-width: 220px; }
+
+.admin-eye-btn { padding: 0; width: 36px; min-height: 36px; height: 36px; display: flex; align-items: center; justify-content: center; }
+
 .status-badge { padding: 3px 10px; border-radius: var(--radius-full); font-size: 11px; font-weight: 600; }
 .status-confirmed { background: rgba(244, 63, 94, 0.15); color: #FDA4AF; }
 .status-locked { background: rgba(245, 158, 11, 0.15); color: #FCD34D; }
