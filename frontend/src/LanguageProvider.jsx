@@ -8,9 +8,9 @@ import { LanguageContext, translations, LANG_STORAGE_KEY } from './i18n';
 export function LanguageProvider({ children }) {
   const [lang, setLangState] = useState(() => {
     try {
-      return localStorage.getItem(LANG_STORAGE_KEY) || 'en';
+      return localStorage.getItem(LANG_STORAGE_KEY) || 'th';
     } catch {
-      return 'en';
+      return 'th';
     }
   });
 

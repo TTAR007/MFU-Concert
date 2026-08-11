@@ -43,6 +43,7 @@ export const translations = {
     ruleTenMinutes: 'Held seats are reserved for 10 minutes — confirm before time runs out or they\'re released automatically.',
     ruleTicketIcon: 'Tap the ticket icon (bottom right) anytime to review your held seats and confirm your booking.',
     building: 'C4 Building',
+    stage: 'STAGE',
 
     // Zone / seat labels
     zone: 'Zone',
@@ -178,6 +179,7 @@ export const translations = {
     ruleTenMinutes: 'ที่นั่งที่จองไว้จะถูกสำรองไว้ 10 นาที — กรุณายืนยันก่อนหมดเวลา มิฉะนั้นจะถูกปล่อยโดยอัตโนมัติ',
     ruleTicketIcon: 'แตะไอคอนตั๋ว (มุมล่างขวา) เพื่อตรวจสอบที่นั่งที่จองไว้และยืนยันการจองได้ตลอดเวลา',
     building: 'อาคาร C4',
+    stage: 'เวที',
 
     zone: 'โซน',
     full: 'เต็ม',

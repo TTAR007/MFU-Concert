@@ -522,7 +522,7 @@ export default function SeatMap({ showId, userId }) {
                 y={stageRect.y + stageRect.height / 2}
                 className="zone-diagram-stage-label"
               >
-                STAGE
+                {t('stage')}
               </text>
             </g>
 
@@ -652,20 +652,20 @@ export default function SeatMap({ showId, userId }) {
                                 className="my-seat-ring"
                               />
                             )}
+                            {/* backrest */}
                             <rect
                               x={seat.pos_x - BACKREST_WIDTH / 2}
                               y={seat.pos_y - SEAT_HEIGHT / 2 - BACKREST_HEIGHT + 1.5}
                               width={BACKREST_WIDTH}
                               height={BACKREST_HEIGHT}
-                              rx={1.5}
                               fill={style.fill}
                             />
+                            {/* seat */}
                             <rect
                               x={seat.pos_x - SEAT_WIDTH / 2}
                               y={seat.pos_y - SEAT_HEIGHT / 2}
                               width={SEAT_WIDTH}
                               height={SEAT_HEIGHT}
-                              rx={2}
                               fill={style.fill}
                             />
                           </g>
