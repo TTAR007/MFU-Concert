@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
 
     const { data: reservations, error: resError } = await supabase
       .from('reservations')
-      .select('seats(section, seat_number)')
+      .select('seats(section, seat_number, row_number)')
       .eq('show_id', showId)
       .eq('user_id', user.id)
       .eq('status', 'confirmed');
@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
     }
 
     const seatLabels = reservations
-      .map(r => `${r.seats.section}${r.seats.seat_number}`)
+      .map(r => `${r.seats.section}${r.seats.row_number}-${r.seats.seat_number}`)
       .sort();
 
     const seatListHtml = seatLabels.map(s => `<li style="margin-bottom:4px;">${s}</li>`).join('');
