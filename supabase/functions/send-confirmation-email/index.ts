@@ -212,6 +212,7 @@ Deno.serve(async (req) => {
         from: `${EVENT_NAME} <${Deno.env.get('GMAIL_USER')!}>`,
         to: user.email!,
         subject: encodeSubject(`Booking Confirmed / ยืนยันการจอง — ${EVENT_NAME}`),
+        content: 'auto',
         html: emailHtml,
       });
     } finally {
