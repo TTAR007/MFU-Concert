@@ -12,12 +12,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
-
+ 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
-
+ 
   try {
     const { showId } = await req.json();
     if (!showId) {
@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
+ 
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'not_authenticated' }), {
@@ -34,13 +34,13 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
+ 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!,
       { global: { headers: { Authorization: authHeader } } }
     );
-
+ 
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData?.user) {
       return new Response(JSON.stringify({ error: 'not_authenticated' }), {
@@ -49,14 +49,14 @@ Deno.serve(async (req) => {
       });
     }
     const user = userData.user;
-
+ 
     const { data: reservations, error: resError } = await supabase
       .from('reservations')
       .select('seats(section, row_number, seat_number)')
       .eq('show_id', showId)
       .eq('user_id', user.id)
       .eq('status', 'confirmed');
-
+ 
     if (resError) {
       return new Response(JSON.stringify({ error: 'query_failed', detail: resError.message }), {
         status: 500,
@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
+ 
     const seats = reservations
       .map(r => r.seats)
       .sort((a, b) => {
@@ -77,10 +77,10 @@ Deno.serve(async (req) => {
         if (a.row_number !== b.row_number) return a.row_number - b.row_number;
         return a.seat_number - b.seat_number;
       });
-
+ 
     const seatCount = seats.length;
     const seatWord = seatCount === 1 ? 'seat' : 'seats';
-
+ 
     const seatRowsHtml = seats
       .map(
         s => `
@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
           </tr>`
       )
       .join('');
-
+ 
     const emailHtml = `
 <!DOCTYPE html>
 <html lang="en">
@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
     <tr>
       <td align="center">
         <table role="presentation" width="100%" style="max-width:480px;background:#14161C;border:1px solid #23232E;border-radius:14px;overflow:hidden;">
-
+ 
           <tr>
             <td style="background:linear-gradient(135deg,#6366F1,#818CF8);padding:28px 28px 22px;text-align:center;">
               <div style="font-size:13px;letter-spacing:0.08em;color:rgba(255,255,255,0.85);text-transform:uppercase;font-weight:600;margin-bottom:6px;">
@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
               <div style="font-size:22px;font-weight:700;color:#ffffff;">${EVENT_NAME}</div>
             </td>
           </tr>
-
+ 
           <tr>
             <td style="padding:26px 28px 10px;">
               <p style="margin:0 0 6px;font-size:15px;color:#F5F5F5;line-height:1.6;">
@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
               </p>
             </td>
           </tr>
-
+ 
           <tr>
             <td style="padding:12px 14px 4px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#1B1E27;border-radius:10px;overflow:hidden;">
@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
               </table>
             </td>
           </tr>
-
+ 
           <tr>
             <td style="padding:22px 28px 6px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
               </table>
             </td>
           </tr>
-
+ 
           <tr>
             <td style="padding:20px 28px 6px;text-align:center;">
               <a href="${SITE_URL}" style="display:inline-block;background:#6366F1;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;padding:13px 28px;border-radius:10px;">
@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
               </a>
             </td>
           </tr>
-
+ 
           <tr>
             <td style="padding:20px 28px 4px;">
               <div style="border-top:1px solid #23232E;padding-top:16px;">
@@ -168,7 +168,7 @@ Deno.serve(async (req) => {
               </div>
             </td>
           </tr>
-
+ 
           <tr>
             <td style="padding:22px 28px 26px;text-align:center;">
               <p style="margin:0;font-size:12px;color:#5A5A63;">
@@ -176,31 +176,14 @@ Deno.serve(async (req) => {
               </p>
             </td>
           </tr>
-
+ 
         </table>
       </td>
     </tr>
   </table>
 </body>
 </html>`;
-
-    const emailText = [
-      `Booking Confirmed / ยืนยันการจองแล้ว — ${EVENT_NAME}`,
-      '',
-      `Your ${seatCount} ${seatWord} / ที่นั่งของคุณ ${seatCount} ที่นั่ง:`,
-      ...seats.map(
-        s => `  - ${s.section}${s.row_number}-${s.seat_number}  (Zone ${s.section} / โซน ${s.section}, Row ${s.row_number} / แถว ${s.row_number}, Seat ${s.seat_number} / ที่นั่ง ${s.seat_number})`
-      ),
-      '',
-      `Date / วันที่: ${EVENT_DATE}`,
-      `Venue / สถานที่: ${VENUE}`,
-      '',
-      `View your ticket / ดูตั๋วของคุณ: ${SITE_URL}`,
-      '',
-      `Please arrive a little early with your QR ticket ready. See you there!`,
-      `กรุณามาถึงก่อนเวลาเล็กน้อยพร้อม QR โค้ด แล้วพบกันนะคะ/ครับ`,
-    ].join('\n');
-
+ 
     const client = new SMTPClient({
       connection: {
         hostname: 'smtp.gmail.com',
@@ -212,19 +195,18 @@ Deno.serve(async (req) => {
         },
       },
     });
-
+ 
     try {
       await client.send({
         from: `${EVENT_NAME} <${Deno.env.get('GMAIL_USER')!}>`,
         to: user.email!,
         subject: `Booking Confirmed / ยืนยันการจอง — ${EVENT_NAME}`,
-        content: emailText,
         html: emailHtml,
       });
     } finally {
       await client.close();
     }
-
+ 
     return new Response(JSON.stringify({ success: true, seatCount }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
