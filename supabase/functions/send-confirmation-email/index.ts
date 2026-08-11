@@ -74,62 +74,20 @@ Deno.serve(async (req) => {
       .map(r => `${r.seats.section}${r.seats.seat_number}`)
       .sort();
 
-    const seatListHtml = seatLabels.map(s => `
-      <span style="display: inline-block; background-color: #f4f4f5; color: #27272a; padding: 6px 12px; border-radius: 6px; font-size: 14px; font-weight: 600; margin-right: 6px; margin-bottom: 6px; border: 1px solid #e4e4e7;">
-        ${s}
-      </span>
-    `).join('');
+    const seatListHtml = seatLabels.map(s => `<li style="margin-bottom:4px;">${s}</li>`).join('');
 
     const emailHtml = `
-      <div style="background-color: #f9fafb; padding: 40px 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #18181b;">
-        <div style="max-width: 520px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; border: 1px solid #e4e4e7; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-          
-          <!-- Header Banner Accent -->
-          <div style="background: linear-gradient(135deg, #635bff 0%, #4f46e5 100%); padding: 24px 32px; color: #ffffff;">
-            <p style="margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; opacity: 0.85;">Booking Confirmed</p>
-            <h2 style="margin: 6px 0 0 0; font-size: 24px; font-weight: 700; line-height: 1.2;">${EVENT_NAME}</h2>
-          </div>
-
-          <!-- Body Content -->
-          <div style="padding: 32px;">
-            <div style="margin-bottom: 24px; border-bottom: 1px solid #f4f4f5; padding-bottom: 16px;">
-              <p style="margin: 0; color: #71717a; font-size: 14px; font-weight: 500;">
-                ${EVENT_DATE} &middot; <strong style="color: #27272a;">${VENUE}</strong>
-              </p>
-            </div>
-
-            <p style="margin: 0 0 16px 0; font-size: 15px; line-height: 1.5; color: #3f3f46;">
-              You're all set! We've secured your spot. Here are your reserved seats:
-            </p>
-
-            <!-- Seat Badges Container -->
-            <div style="margin-bottom: 24px;">
-              ${seatListHtml}
-            </div>
-
-            <!-- Instruction Box -->
-            <div style="background-color: #f8fafc; border-left: 3px solid #635bff; padding: 12px 16px; border-radius: 0 8px 8px 0; margin-bottom: 28px;">
-              <p style="margin: 0; font-size: 14px; color: #475569; line-height: 1.4;">
-                Show your QR ticket (found under <strong>"My Bookings"</strong> on the site) at the venue entry.
-              </p>
-            </div>
-
-            <!-- Action Button -->
-            <div style="text-align: left;">
-              <a href="${SITE_URL}" style="display: inline-block; background-color: #635bff; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 600; box-shadow: 0 2px 4px rgba(99, 91, 255, 0.2);">
-                View my tickets &rarr;
-              </a>
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div style="background-color: #f9fafb; padding: 16px 32px; border-top: 1px solid #f4f4f5; text-align: center;">
-            <p style="margin: 0; font-size: 12px; color: #a1a1aa;">
-              If you have any questions, reach out to our support team.
-            </p>
-          </div>
-
-        </div>
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #18181b;">
+        <h2 style="margin-bottom: 4px;">${EVENT_NAME}</h2>
+        <p style="color:#71717a; margin-top:0;">${EVENT_DATE} &middot; ${VENUE}</p>
+        <p>Your booking is confirmed! Here are your seat(s):</p>
+        <ul style="padding-left: 20px;">${seatListHtml}</ul>
+        <p>Show your QR ticket (in "My Bookings" on the site) at entry.</p>
+        <p style="margin-top: 24px;">
+          <a href="${SITE_URL}" style="background:#635bff; color:#fff; padding:10px 18px; border-radius:6px; text-decoration:none;">
+            View my tickets
+          </a>
+        </p>
       </div>
     `;
 
