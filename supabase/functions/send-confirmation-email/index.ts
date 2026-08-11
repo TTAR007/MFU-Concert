@@ -1,6 +1,6 @@
 // supabase/functions/send-confirmation-email/index.ts
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
+
 
 const EVENT_NAME = 'MFU Band Concert 2026'; // update to your real event name
 const EVENT_DATE = 'Sunday, August 30, 2026 · 7:30 PM'; // update to your real date
@@ -12,6 +12,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+// Email subject headers require RFC 2047 "encoded-word" syntax for any non-ASCII
+// text (like Thai) — without it, mail servers/clients show the raw UTF-8 bytes
+// as literal "=E0=B8=81..." text instead of decoding them properly.
+function encodeSubject(text: string): string {
+  const base64 = btoa(unescape(encodeURIComponent(text)));
+  return `=?UTF-8?B?${base64}?=`;
+}
  
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -200,7 +208,7 @@ Deno.serve(async (req) => {
       await client.send({
         from: `${EVENT_NAME} <${Deno.env.get('GMAIL_USER')!}>`,
         to: user.email!,
-        subject: `Booking Confirmed / ยืนยันการจอง — ${EVENT_NAME}`,
+        subject: encodeSubject(`Booking Confirmed / ยืนยันการจอง — ${EVENT_NAME}`),
         html: emailHtml,
       });
     } finally {
