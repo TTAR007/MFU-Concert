@@ -4,6 +4,13 @@ import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../lib/supabaseClient';
 import { useLanguage } from '../i18n';
 
+// Must match the seat shape constants in SeatMap.jsx exactly, so the mini-map
+// here renders visually identical seats to the main seat selection view.
+const SEAT_WIDTH = 8;
+const SEAT_HEIGHT = 7;
+const BACKREST_WIDTH = 6;
+const BACKREST_HEIGHT = 3.5;
+
 export default function MyBookings({ showId, userId }) {
   const { t } = useLanguage();
   const [bookings, setBookings] = useState([]);
@@ -30,6 +37,9 @@ export default function MyBookings({ showId, userId }) {
       const sorted = (data || []).sort((a, b) => {
         if (a.seats.section !== b.seats.section) {
           return a.seats.section.localeCompare(b.seats.section);
+        }
+        if (a.seats.row_number !== b.seats.row_number) {
+          return a.seats.row_number - b.seats.row_number;
         }
         return a.seats.seat_number - b.seats.seat_number;
       });
@@ -191,7 +201,7 @@ export default function MyBookings({ showId, userId }) {
           >
             <div className="ticket-stub-main">
               <span className="ticket-stub-eyebrow">{t('seat').toUpperCase()}</span>
-              <span className="ticket-stub-number">{b.seats.section}{b.seats.seat_number}</span>
+              <span className="ticket-stub-number">{b.seats.section}{b.seats.row_number}-{b.seats.seat_number}</span>
               {b.checked_in && <span className="status-badge status-checked-in" style={{ marginTop: 4, alignSelf: 'flex-start' }}>{t('checkedIn')}</span>}
             </div>
             <div className="ticket-stub-perforation" aria-hidden="true">
@@ -230,10 +240,10 @@ export default function MyBookings({ showId, userId }) {
             </button>
             <div className="ticket-modal-content">
               <p id="ticket-modal-heading" className="section-heading" style={{ marginBottom: 4 }}>
-                {t('seat')} {activeTicket.seats.section}{activeTicket.seats.seat_number}
+                {t('seat')} {activeTicket.seats.section}{activeTicket.seats.row_number}-{activeTicket.seats.seat_number}
               </p>
               <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>
-                {t('zone')} {activeTicket.seats.section} &middot; {t('row')} {activeTicket.seats.row_number}
+                {t('zone')} {activeTicket.seats.section} &middot; {t('row')} {activeTicket.seats.row_number} &middot; {t('seat')} {activeTicket.seats.seat_number}
               </p>
 
               {!zoneMapLoading && zoneMapSeats.length > 0 && (
@@ -251,16 +261,30 @@ export default function MyBookings({ showId, userId }) {
                         {rl.rowNumber}
                       </text>
                     ))}
-                    {zoneMapSeats.map(s => (
-                      <circle
-                        key={s.id}
-                        cx={s.pos_x}
-                        cy={s.pos_y}
-                        r={s.id === activeTicket.seat_id ? 10 : 4}
-                        fill={s.id === activeTicket.seat_id ? 'var(--accent)' : 'var(--border)'}
-                        className={s.id === activeTicket.seat_id ? 'find-seat-highlight' : ''}
-                      />
-                    ))}
+                    {zoneMapSeats.map(s => {
+                      const isTarget = s.id === activeTicket.seat_id;
+                      const fill = isTarget ? 'var(--accent)' : 'var(--border)';
+                      return (
+                        <g key={s.id} className={isTarget ? 'find-seat-highlight' : ''}>
+                          {/* backrest */}
+                          <rect
+                            x={s.pos_x - BACKREST_WIDTH / 2}
+                            y={s.pos_y - SEAT_HEIGHT / 2 - BACKREST_HEIGHT + 1.5}
+                            width={BACKREST_WIDTH}
+                            height={BACKREST_HEIGHT}
+                            fill={fill}
+                          />
+                          {/* seat */}
+                          <rect
+                            x={s.pos_x - SEAT_WIDTH / 2}
+                            y={s.pos_y - SEAT_HEIGHT / 2}
+                            width={SEAT_WIDTH}
+                            height={SEAT_HEIGHT}
+                            fill={fill}
+                          />
+                        </g>
+                      );
+                    })}
                   </svg>
                 </div>
               )}

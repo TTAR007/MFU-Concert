@@ -3,6 +3,13 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useLanguage } from '../i18n';
 
+// Must match the seat shape constants in SeatMap.jsx exactly, so the mini-map
+// here renders visually identical seats to the main seat selection view.
+const SEAT_WIDTH = 8;
+const SEAT_HEIGHT = 7;
+const BACKREST_WIDTH = 6;
+const BACKREST_HEIGHT = 3.5;
+
 export default function AdminView({ showId, adminId }) {
   const { t } = useLanguage();
   const [seats, setSeats] = useState([]);
@@ -28,11 +35,24 @@ export default function AdminView({ showId, adminId }) {
     const xs = zoneSeats.map(s => s.pos_x);
     const ys = zoneSeats.map(s => s.pos_y);
     const pad = 15;
-    const minX = Math.min(...xs) - pad;
+    const minX = Math.min(...xs) - pad - 10; // extra room on the left for row labels
     const minY = Math.min(...ys) - pad;
-    const width = Math.max(...xs) - Math.min(...xs) + pad * 2;
+    const width = Math.max(...xs) - Math.min(...xs) + pad * 2 + 10;
     const height = Math.max(...ys) - Math.min(...ys) + pad * 2;
-    return { zoneSeats, viewBox: `${minX} ${minY} ${width} ${height}` };
+
+    const rowLabelSeats = {};
+    zoneSeats.forEach(s => {
+      if (!rowLabelSeats[s.row_number] || s.pos_x < rowLabelSeats[s.row_number].pos_x) {
+        rowLabelSeats[s.row_number] = s;
+      }
+    });
+    const rowLabels = Object.entries(rowLabelSeats).map(([rowNumber, leftmostSeat]) => ({
+      rowNumber,
+      x: leftmostSeat.pos_x - 9,
+      y: leftmostSeat.pos_y,
+    }));
+
+    return { zoneSeats, rowLabels, viewBox: `${minX} ${minY} ${width} ${height}` };
   }
 
   function showMessage(text, autoClearMs = 4000) {
@@ -154,11 +174,13 @@ export default function AdminView({ showId, adminId }) {
       .filter(s => selectedZone === 'all' || s.section === selectedZone)
       .filter(s => {
         if (!searchTerm.trim()) return true;
-        const label = `${s.section}${s.seat_number}`.toLowerCase();
-        return label.includes(searchTerm.trim().toLowerCase());
+        const normalize = (str) => str.toLowerCase().replace(/[\s-]/g, '');
+        const label = normalize(`${s.section}${s.row_number}-${s.seat_number}`);
+        return label.includes(normalize(searchTerm.trim()));
       })
       .sort((a, b) => {
         if (a.section !== b.section) return a.section.localeCompare(b.section);
+        if (a.row_number !== b.row_number) return a.row_number - b.row_number;
         return a.seat_number - b.seat_number;
       });
   }, [seats, reservations, selectedZone, searchTerm]);
@@ -238,7 +260,7 @@ export default function AdminView({ showId, adminId }) {
               const r = reservations[s.id];
               return (
                 <tr key={s.id}>
-                  <td>{s.section}{s.seat_number}</td>
+                  <td>{s.section}{s.row_number}-{s.seat_number}</td>
                   <td>
                     <span className={`status-badge status-${r.status}`}>{r.status}</span>
                     {r.checked_in && <span className="status-badge status-checked-in" style={{ marginLeft: 6 }}>{t('checkedIn')}</span>}
@@ -299,7 +321,7 @@ export default function AdminView({ showId, adminId }) {
               onClick={(e) => e.stopPropagation()}
               role="dialog"
               aria-modal="true"
-              aria-label={`${t('zone')} ${seat.section}`}
+              aria-label={`${t('seat')} ${seat.section}${seat.row_number}-${seat.seat_number}`}
             >
               <button
                 className="ticket-modal-close"
@@ -310,24 +332,50 @@ export default function AdminView({ showId, adminId }) {
               </button>
               <div className="ticket-modal-content">
                 <p className="section-heading" style={{ marginBottom: 4 }}>
-                  {t('zone')} {seat.section}
+                  {t('seat')} {seat.section}{seat.row_number}-{seat.seat_number}
                 </p>
                 <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 12 }}>
-                  {t('seat')} {seat.section}{seat.seat_number} &middot; {t('row')} {seat.row_number}
+                  {t('zone')} {seat.section} &middot; {t('row')} {seat.row_number} &middot; {t('seat')} {seat.seat_number}
                 </p>
                 {miniMap && (
                   <div className="find-seat-map">
                     <svg viewBox={miniMap.viewBox} className="find-seat-svg" aria-hidden="true">
-                      {miniMap.zoneSeats.map(zs => (
-                        <circle
-                          key={zs.id}
-                          cx={zs.pos_x}
-                          cy={zs.pos_y}
-                          r={zs.id === seat.id ? 10 : 4}
-                          fill={zs.id === seat.id ? 'var(--accent)' : 'var(--border)'}
-                          className={zs.id === seat.id ? 'find-seat-highlight' : ''}
-                        />
+                      {miniMap.rowLabels.map(rl => (
+                        <text
+                          key={rl.rowNumber}
+                          x={rl.x}
+                          y={rl.y}
+                          className="row-label find-seat-row-label"
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                        >
+                          {rl.rowNumber}
+                        </text>
                       ))}
+                      {miniMap.zoneSeats.map(zs => {
+                        const isTarget = zs.id === seat.id;
+                        const fill = isTarget ? 'var(--accent)' : 'var(--border)';
+                        return (
+                          <g key={zs.id} className={isTarget ? 'find-seat-highlight' : ''}>
+                            {/* backrest */}
+                            <rect
+                              x={zs.pos_x - BACKREST_WIDTH / 2}
+                              y={zs.pos_y - SEAT_HEIGHT / 2 - BACKREST_HEIGHT + 1.5}
+                              width={BACKREST_WIDTH}
+                              height={BACKREST_HEIGHT}
+                              fill={fill}
+                            />
+                            {/* seat */}
+                            <rect
+                              x={zs.pos_x - SEAT_WIDTH / 2}
+                              y={zs.pos_y - SEAT_HEIGHT / 2}
+                              width={SEAT_WIDTH}
+                              height={SEAT_HEIGHT}
+                              fill={fill}
+                            />
+                          </g>
+                        );
+                      })}
                     </svg>
                   </div>
                 )}

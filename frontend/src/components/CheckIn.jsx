@@ -24,7 +24,7 @@ export default function CheckIn({ showId, adminId }) {
   const loadRecent = useCallback(async () => {
     const { data, error } = await supabase
       .from('reservations')
-      .select('checked_in_at, seats(section, seat_number)')
+      .select('checked_in_at, seats(section, row_number, seat_number)')
       .eq('show_id', showId)
       .eq('checked_in', true)
       .order('checked_in_at', { ascending: false })
@@ -33,7 +33,7 @@ export default function CheckIn({ showId, adminId }) {
     if (!error && data) {
       setRecent(
         data.map(r => ({
-          message: t('checkedInSeat', r.seats.section, r.seats.seat_number),
+          message: t('checkedInSeat', r.seats.section, r.seats.row_number, r.seats.seat_number),
           time: new Date(r.checked_in_at).toLocaleTimeString(),
         }))
       );
@@ -74,6 +74,7 @@ export default function CheckIn({ showId, adminId }) {
         already_checked_in: t(
           'alreadyCheckedIn',
           data.section,
+          data.row_number,
           data.seat_number,
           data.checked_in_at ? new Date(data.checked_in_at).toLocaleTimeString() : null
         ),
@@ -82,7 +83,7 @@ export default function CheckIn({ showId, adminId }) {
       showResult({ type: 'error', message: messages[data?.reason] || t('checkInFailed') });
       flashFeedback('error');
     } else {
-      const message = t('checkedInSeat', data.section, data.seat_number);
+      const message = t('checkedInSeat', data.section, data.row_number, data.seat_number);
       showResult({ type: 'success', message });
       loadRecent();
       flashFeedback('success');

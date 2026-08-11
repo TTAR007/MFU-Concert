@@ -615,24 +615,36 @@ export default function SeatMap({ showId, userId }) {
                       {zoneSeats.map(seat => {
                         const status = seatStatus(seat.id);
                         const atCap = mySelections.length >= 4;
-                        const clickable = status === 'available' && !atCap && !lockingSeatId;
+                        const isSelected = status === 'mine';
+                        const clickable = (status === 'available' && !atCap && !lockingSeatId) || (isSelected && !lockingSeatId && removingId !== seat.id);
                         const style = glow[status];
                         const mine = (status === 'confirmed' || status === 'checked_in') && isMyReservation(seat.id);
                         const label = `${t('seat')} ${seat.section}${seat.seat_number} — ${
                           status === 'checked_in' ? t('checkedIn') :
                           status === 'available' && atCap ? `${t('available')}, ${t('limitReached')}` :
+                          isSelected ? t('tapToDeselect') :
                           status
                         }${mine ? ` — ${t('yourSeat')}` : ''}`;
+
+                        function handleTap() {
+                          if (!clickable) return;
+                          if (isSelected) {
+                            handleRelease(seat.id);
+                          } else {
+                            handleSeatClick(seat);
+                          }
+                        }
+
                         return (
                           <g
                             key={seat.id}
                             className={`seat-dot ${clickable ? 'clickable' : ''}`}
                             style={{ cursor: clickable ? 'pointer' : 'not-allowed' }}
-                            onClick={() => clickable && handleSeatClick(seat)}
+                            onClick={handleTap}
                             onKeyDown={(e) => {
                               if ((e.key === 'Enter' || e.key === ' ') && clickable) {
                                 e.preventDefault();
-                                handleSeatClick(seat);
+                                handleTap();
                               }
                             }}
                             role="button"
@@ -751,7 +763,7 @@ export default function SeatMap({ showId, userId }) {
                   <li key={id} className="ticket-stub">
                     <div className="ticket-stub-main">
                       <span className="ticket-stub-eyebrow">{t('seat').toUpperCase()}</span>
-                      <span className="ticket-stub-number">{seat.section}{seat.seat_number}</span>
+                      <span className="ticket-stub-number">{seat.section}{seat.row_number}-{seat.seat_number}</span>
                     </div>
                     <div className="ticket-stub-perforation" aria-hidden="true">
                       <span className="ticket-stub-notch ticket-stub-notch-top" />
