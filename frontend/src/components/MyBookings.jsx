@@ -42,6 +42,44 @@ export default function MyBookings({ showId, userId }) {
     loadBookings();
   }, [showId, userId]);
 
+  // Live-update check-in status the instant an admin scans this user's ticket —
+  // no manual refresh needed while My Bookings is open.
+  useEffect(() => {
+    if (!showId || !userId) return;
+
+    const channel = supabase
+      .channel(`my-bookings-checkin-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'reservations',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          const updated = payload.new;
+          if (updated.show_id !== showId) return;
+
+          setBookings(prev =>
+            prev.map(b =>
+              b.id === updated.id ? { ...b, checked_in: updated.checked_in } : b
+            )
+          );
+
+          // Keep the open ticket modal in sync too, if it's the one that just got scanned.
+          setActiveTicket(prev =>
+            prev && prev.id === updated.id ? { ...prev, checked_in: updated.checked_in } : prev
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [showId, userId]);
+
   async function openTicket(b, triggerEl) {
     lastTriggerRef.current = triggerEl;
     setActiveTicket(b);
@@ -228,7 +266,7 @@ export default function MyBookings({ showId, userId }) {
               )}
 
               {activeTicket.ticket_code && (
-                <div className="ticket-qr-large">
+                <div className={`ticket-qr-large ${activeTicket.checked_in ? 'ticket-qr-checked-in' : ''}`}>
                   <QRCodeSVG value={activeTicket.ticket_code} size={220} bgColor="#ffffff" fgColor="#000000" />
                   {activeTicket.checked_in && (
                     <span className="status-badge status-checked-in qr-checked-in-badge">{t('checkedIn')}</span>
