@@ -195,6 +195,23 @@ Deno.serve(async (req) => {
 </body>
 </html>`;
  
+    const emailText = [
+      `Booking Confirmed / ยืนยันการจองแล้ว — ${EVENT_NAME}`,
+      '',
+      `Your ${seatCount} ${seatWord} / ที่นั่งของคุณ ${seatCount} ที่นั่ง:`,
+      ...seats.map(
+        s => `  - ${s.section}${s.row_number}-${s.seat_number}  (Zone ${s.section} / โซน ${s.section}, Row ${s.row_number} / แถว ${s.row_number}, Seat ${s.seat_number} / ที่นั่ง ${s.seat_number})`
+      ),
+      '',
+      `Date / วันที่: ${EVENT_DATE}`,
+      `Venue / สถานที่: ${VENUE}`,
+      '',
+      `View your ticket / ดูตั๋วของคุณ: ${SITE_URL}`,
+      '',
+      `Please arrive a little early with your QR ticket ready. See you there!`,
+      `กรุณามาถึงก่อนเวลาเล็กน้อยพร้อม QR โค้ด แล้วพบกันนะคะ/ครับ`,
+    ].join('\n');
+ 
     const client = new SMTPClient({
       connection: {
         hostname: 'smtp.gmail.com',
@@ -212,7 +229,7 @@ Deno.serve(async (req) => {
         from: `${EVENT_NAME} <${Deno.env.get('GMAIL_USER')!}>`,
         to: user.email!,
         subject: encodeSubject(`Booking Confirmed / ยืนยันการจอง — ${EVENT_NAME}`),
-        content: 'auto',
+        content: emailText,
         html: emailHtml,
       });
     } finally {
