@@ -5,7 +5,7 @@ import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
 const EVENT_NAME = 'MFU Band Concert 2026'; // update to your real event name
 const EVENT_DATE = 'Sunday, August 30, 2026 · 7:30 PM'; // update to your real date
 const VENUE = 'C4 Building';
-const SITE_URL = 'https://mfu-concert-blush.vercel.app/'; // update once deployed
+const SITE_URL = 'https://mfu-concert-blush.vercel.app'; // update once deployed
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -195,23 +195,6 @@ Deno.serve(async (req) => {
 </body>
 </html>`;
  
-    const emailText = [
-      `Booking Confirmed / ยืนยันการจองแล้ว — ${EVENT_NAME}`,
-      '',
-      `Your ${seatCount} ${seatWord} / ที่นั่งของคุณ ${seatCount} ที่นั่ง:`,
-      ...seats.map(
-        s => `  - ${s.section}${s.row_number}-${s.seat_number}  (Zone ${s.section} / โซน ${s.section}, Row ${s.row_number} / แถว ${s.row_number}, Seat ${s.seat_number} / ที่นั่ง ${s.seat_number})`
-      ),
-      '',
-      `Date / วันที่: ${EVENT_DATE}`,
-      `Venue / สถานที่: ${VENUE}`,
-      '',
-      `View your ticket / ดูตั๋วของคุณ: ${SITE_URL}`,
-      '',
-      `Please arrive a little early with your QR ticket ready. See you there!`,
-      `กรุณามาถึงก่อนเวลาเล็กน้อยพร้อม QR โค้ด แล้วพบกันนะคะ/ครับ`,
-    ].join('\n');
- 
     const client = new SMTPClient({
       connection: {
         hostname: 'smtp.gmail.com',
@@ -229,7 +212,6 @@ Deno.serve(async (req) => {
         from: `${EVENT_NAME} <${Deno.env.get('GMAIL_USER')!}>`,
         to: user.email!,
         subject: encodeSubject(`Booking Confirmed / ยืนยันการจอง — ${EVENT_NAME}`),
-        content: emailText,
         html: emailHtml,
       });
     } finally {
