@@ -28,6 +28,11 @@ export default function SeatMap({ showId, userId }) {
   const [confirming, setConfirming] = useState(false);
   const [confirmingBooking, setConfirmingBooking] = useState(false);
   const messageTimeoutRef = useRef(null);
+  // Tracks seat IDs the user just deliberately unselected themselves, so the
+  // realtime DELETE handler can tell "you chose to unselect this" apart from
+  // "this expired/was released by someone else" and only show the expiry
+  // message for the latter.
+  const selfReleasedSeatIdsRef = useRef(new Set());
   const panMovedRef = useRef(false);
   const suppressClickRef = useRef(false);
 
@@ -90,7 +95,7 @@ export default function SeatMap({ showId, userId }) {
     const resData = await fetchAllRows(
       supabase
         .from('reservations')
-        .select('seat_id, status, user_id, expires_at, checked_in')
+        .select('id, seat_id, status, user_id, expires_at, checked_in')
         .eq('show_id', showId)
         .in('status', ['locked', 'confirmed'])
     );
@@ -98,7 +103,7 @@ export default function SeatMap({ showId, userId }) {
     const map = {};
     (resData || []).forEach(r => {
       if (r.status === 'confirmed' || new Date(r.expires_at) > new Date()) {
-        map[r.seat_id] = { status: r.status, user_id: r.user_id, expires_at: r.expires_at, checked_in: r.checked_in };
+        map[r.seat_id] = { reservationId: r.id, status: r.status, user_id: r.user_id, expires_at: r.expires_at, checked_in: r.checked_in };
       }
     });
     setReservations(map);
@@ -118,18 +123,33 @@ export default function SeatMap({ showId, userId }) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'reservations', filter: `show_id=eq.${showId}` },
         (payload) => {
+          let deletedSeatId = null;
+
           setReservations(prev => {
             const next = { ...prev };
             if (payload.eventType === 'DELETE') {
-              const wasMine = next[payload.old.seat_id]?.user_id === userId;
-              delete next[payload.old.seat_id];
-              if (wasMine) {
-                showMessage(t('seatExpiredReleased'), 'info');
+              // Supabase's filtered Realtime subscriptions only include the primary
+              // key (id) in payload.old for DELETE events, not every column — even
+              // with REPLICA IDENTITY FULL at the source. So we reverse-lookup which
+              // seat this was by matching the reservation's own id, which we cache
+              // alongside each seat whenever we populate this state elsewhere.
+              const deletedReservationId = payload.old?.id;
+              const match = Object.entries(next).find(([, v]) => v.reservationId === deletedReservationId);
+              if (match) {
+                deletedSeatId = match[0];
+                const wasMine = next[deletedSeatId]?.user_id === userId;
+                const wasSelfInitiated = selfReleasedSeatIdsRef.current.has(deletedSeatId);
+                delete next[deletedSeatId];
+                if (wasSelfInitiated) {
+                  selfReleasedSeatIdsRef.current.delete(deletedSeatId);
+                } else if (wasMine) {
+                  showMessage(t('seatExpiredReleased'), 'info');
+                }
               }
             } else {
               const row = payload.new;
               if (row.status === 'confirmed' || new Date(row.expires_at) > new Date()) {
-                next[row.seat_id] = { status: row.status, user_id: row.user_id, expires_at: row.expires_at, checked_in: row.checked_in };
+                next[row.seat_id] = { reservationId: row.id, status: row.status, user_id: row.user_id, expires_at: row.expires_at, checked_in: row.checked_in };
               } else {
                 delete next[row.seat_id];
               }
@@ -137,8 +157,8 @@ export default function SeatMap({ showId, userId }) {
             return next;
           });
 
-          if (payload.eventType === 'DELETE') {
-            setMySelections(prev => prev.filter(id => id !== payload.old.seat_id));
+          if (payload.eventType === 'DELETE' && deletedSeatId) {
+            setMySelections(prev => prev.filter(id => id !== deletedSeatId));
           }
         }
       )
@@ -211,6 +231,7 @@ export default function SeatMap({ showId, userId }) {
 
   async function handleRelease(seatId) {
     setRemovingId(seatId);
+    selfReleasedSeatIdsRef.current.add(seatId);
     const { data, error } = await supabase.rpc('release_own_lock', {
       p_seat_id: seatId,
       p_user_id: userId,
@@ -218,6 +239,7 @@ export default function SeatMap({ showId, userId }) {
     setRemovingId(null);
 
     if (error || !data?.success) {
+      selfReleasedSeatIdsRef.current.delete(seatId);
       showMessage(t('removeSeatError'), 'error');
       return;
     }
@@ -232,6 +254,10 @@ export default function SeatMap({ showId, userId }) {
       delete next[seatId];
       return next;
     });
+
+    // Safety net: if the realtime DELETE event's own cleanup (above) never
+    // fires for any reason, don't let this marker linger forever.
+    setTimeout(() => selfReleasedSeatIdsRef.current.delete(seatId), 5000);
   }
 
   async function handleConfirm() {
