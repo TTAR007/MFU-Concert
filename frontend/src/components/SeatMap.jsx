@@ -16,6 +16,7 @@ export default function SeatMap({ showId, userId }) {
   const { t } = useLanguage();
   const [seats, setSeats] = useState([]);
   const [reservations, setReservations] = useState({});
+  const [seatCap, setSeatCap] = useState(4);
   const [mySelections, setMySelections] = useState([]);
   const [message, setMessage] = useState(null);
   const [toastPos, setToastPos] = useState({ top: '50%', left: '50%' });
@@ -117,6 +118,18 @@ export default function SeatMap({ showId, userId }) {
   useEffect(() => { loadData(); }, [showId, userId]);
 
   useEffect(() => {
+    if (!userId) return;
+    supabase
+      .from('profiles')
+      .select('seat_cap_override')
+      .eq('id', userId)
+      .single()
+      .then(({ data }) => {
+        setSeatCap(data?.seat_cap_override || 4);
+      });
+  }, [userId]);
+
+  useEffect(() => {
     const channel = supabase
       .channel('seats-' + showId)
       .on(
@@ -199,8 +212,8 @@ export default function SeatMap({ showId, userId }) {
     const status = seatStatus(seat.id);
     if (status !== 'available' || lockingSeatId) return;
 
-    if (mySelections.length >= 4) {
-      showMessage(t('capReached'), 'error');
+    if (mySelections.length >= seatCap) {
+      showMessage(t('capReached', seatCap), 'error');
       return;
     }
 
@@ -215,7 +228,7 @@ export default function SeatMap({ showId, userId }) {
       const reason = data?.reason || 'error';
       showMessage(
         reason === 'seat_taken' ? t('seatTaken') :
-        reason === 'cap_reached' ? t('capReached') :
+        reason === 'cap_reached' ? t('capReached', seatCap) :
         t('seatSelectError'),
         'error'
       );
@@ -640,7 +653,7 @@ export default function SeatMap({ showId, userId }) {
                       ))}
                       {zoneSeats.map(seat => {
                         const status = seatStatus(seat.id);
-                        const atCap = mySelections.length >= 4;
+                        const atCap = mySelections.length >= seatCap;
                         const isSelected = status === 'mine';
                         const clickable = (status === 'available' && !atCap && !lockingSeatId) || (isSelected && !lockingSeatId && removingId !== seat.id);
                         const style = glow[status];
@@ -744,7 +757,7 @@ export default function SeatMap({ showId, userId }) {
         aria-expanded={panelOpen}
         aria-label={
           mySelections.length > 0
-            ? `${mySelections.length} ${t('seatsSelectedOf')}`
+            ? `${mySelections.length} ${t('seatsSelectedOf', seatCap)}`
             : t('noSeatsYet')
         }
         disabled={mySelections.length === 0}
@@ -775,8 +788,8 @@ export default function SeatMap({ showId, userId }) {
 
             <div className="selection-drawer-header">
               <span className="selection-count">
-                {mySelections.length} {t('seatsSelectedOf')}
-                {mySelections.length >= 4 && ` ${t('limitReached')}`}
+                {mySelections.length} {t('seatsSelectedOf', seatCap)}
+                {mySelections.length >= seatCap && ` ${t('limitReached')}`}
               </span>
             </div>
 

@@ -1,6 +1,7 @@
 // src/components/MyBookings.jsx
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import html2canvas from 'html2canvas';
 import { supabase } from '../lib/supabaseClient';
 import { useLanguage } from '../i18n';
 
@@ -21,6 +22,9 @@ export default function MyBookings({ showId, userId }) {
   const [zoneMapSeats, setZoneMapSeats] = useState([]);
   const [zoneMapLoading, setZoneMapLoading] = useState(false);
   const closeButtonRef = useRef(null);
+  const printableTicketRef = useRef(null);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState(false);
   const lastTriggerRef = useRef(null);
 
   async function loadBookings() {
@@ -94,6 +98,7 @@ export default function MyBookings({ showId, userId }) {
     lastTriggerRef.current = triggerEl;
     setActiveTicket(b);
     setConfirmingCancel(false);
+    setDownloadError(false);
     setZoneMapSeats([]);
     setZoneMapLoading(true);
 
@@ -112,6 +117,29 @@ export default function MyBookings({ showId, userId }) {
     setConfirmingCancel(false);
     lastTriggerRef.current?.focus();
   }, []);
+
+  async function handleDownloadTicket() {
+    if (!printableTicketRef.current || !activeTicket) return;
+    setDownloading(true);
+    setDownloadError(false);
+    try {
+      const canvas = await html2canvas(printableTicketRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2, // sharper output for zooming in / printing
+      });
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = `ticket-${activeTicket.seats.section}${activeTicket.seats.row_number}-${activeTicket.seats.seat_number}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      setDownloadError(true);
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   async function handleCancelBooking() {
     if (!activeTicket) return;
@@ -297,9 +325,61 @@ export default function MyBookings({ showId, userId }) {
                   )}
                 </div>
               )}
+
+              {/* Hidden, print-friendly (light background) layout used only for the
+                  downloaded image — kept off-screen rather than display:none, since
+                  html2canvas can't capture elements that aren't actually rendered. */}
+              <div style={{ position: 'fixed', left: -9999, top: 0, pointerEvents: 'none' }} aria-hidden="true">
+                <div
+                  ref={printableTicketRef}
+                  style={{
+                    width: 360,
+                    padding: 32,
+                    background: '#ffffff',
+                    color: '#18181B',
+                    fontFamily: 'Arial, sans-serif',
+                    textAlign: 'center',
+                  }}
+                >
+                  <p style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 800 }}>
+                    {activeTicket.seats.section}{activeTicket.seats.row_number}-{activeTicket.seats.seat_number}
+                  </p>
+                  <p style={{ margin: '0 0 20px', fontSize: 14, color: '#71717A' }}>
+                    {t('zone')} {activeTicket.seats.section} &middot; {t('row')} {activeTicket.seats.row_number} &middot; {t('seat')} {activeTicket.seats.seat_number}
+                  </p>
+                  {activeTicket.ticket_code && (
+                    <div style={{ display: 'inline-block', padding: 16, background: '#ffffff', border: '1px solid #E4E4E7', borderRadius: 12 }}>
+                      <QRCodeSVG value={activeTicket.ticket_code} size={200} bgColor="#ffffff" fgColor="#000000" />
+                    </div>
+                  )}
+                  {activeTicket.checked_in && (
+                    <p style={{ margin: '16px 0 0', fontSize: 13, fontWeight: 700, color: '#047857' }}>
+                      {t('checkedIn')}
+                    </p>
+                  )}
+                  <p style={{ margin: '20px 0 0', fontSize: 12, color: '#A1A1AA' }}>
+                    {t('showAtEntry')}
+                  </p>
+                </div>
+              </div>
+
               <p style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 12, marginBottom: 16 }}>
                 {t('showAtEntry')}
               </p>
+
+              <button
+                className="btn"
+                style={{ width: '100%', marginBottom: 12 }}
+                onClick={handleDownloadTicket}
+                disabled={downloading}
+              >
+                {downloading ? t('downloading') : t('downloadTicket')}
+              </button>
+              {downloadError && (
+                <p style={{ color: 'var(--taken)', fontSize: 12, marginTop: -8, marginBottom: 12 }}>
+                  {t('downloadFailed')}
+                </p>
+              )}
 
               {!confirmingCancel ? (
                 <button className="btn-text" style={{ color: 'var(--taken)' }} onClick={() => setConfirmingCancel(true)}>
