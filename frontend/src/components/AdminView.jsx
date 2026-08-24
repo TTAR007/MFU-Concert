@@ -175,8 +175,10 @@ export default function AdminView({ showId, adminId }) {
       .filter(s => {
         if (!searchTerm.trim()) return true;
         const normalize = (str) => str.toLowerCase().replace(/[\s-]/g, '');
-        const label = normalize(`${s.section}${s.row_number}-${s.seat_number}`);
-        return label.includes(normalize(searchTerm.trim()));
+        const query = normalize(searchTerm.trim());
+        const seatLabel = normalize(`${s.section}${s.row_number}-${s.seat_number}`);
+        const email = (reservations[s.id]?.profiles?.email || '').toLowerCase();
+        return seatLabel.includes(query) || email.includes(searchTerm.trim().toLowerCase());
       })
       .sort((a, b) => {
         if (a.section !== b.section) return a.section.localeCompare(b.section);
