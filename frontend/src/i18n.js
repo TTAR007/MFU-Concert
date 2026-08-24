@@ -81,7 +81,7 @@ export const translations = {
 
     // My bookings
     yourSeats: 'Your seats',
-    tapTicketHint: 'Tap a ticket to show its QR code at entry.',
+    tapTicketHint: 'Tap a ticket to show its QR code, download it, or cancel it.',
     noBookingsYetFull: 'No confirmed seats yet. Head to the Seat Map to grab one.',
     loadingBookings: 'Loading your bookings…',
     seat: 'Seat',
@@ -217,7 +217,7 @@ export const translations = {
     seatExpiredReleased: 'ที่นั่งที่คุณจองไว้หนึ่งที่หมดเวลาแล้วและถูกปล่อยคืน',
 
     yourSeats: 'ที่นั่งของคุณ',
-    tapTicketHint: 'แตะตั๋วเพื่อแสดงรหัส QR ที่ทางเข้า',
+    tapTicketHint: 'แตะตั๋วเพื่อแสดงรหัส QR Code หรือ ยกเลิกการจอง',
     noBookingsYetFull: 'ยังไม่มีที่นั่งที่ยืนยันแล้ว ไปที่ผังที่นั่งเพื่อจองที่นั่ง',
     loadingBookings: 'กำลังโหลดการจองของคุณ…',
     seat: 'ที่นั่ง',
