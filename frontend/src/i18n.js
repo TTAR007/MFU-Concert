@@ -81,7 +81,7 @@ export const translations = {
 
     // My bookings
     yourSeats: 'Your seats',
-    tapTicketHint: 'Tap a ticket to show its QR code, download it, or cancel it.',
+    tapTicketHint: 'Tap a ticket to show its QR code, or cancel it.',
     noBookingsYetFull: 'No confirmed seats yet. Head to the Seat Map to grab one.',
     loadingBookings: 'Loading your bookings…',
     seat: 'Seat',
