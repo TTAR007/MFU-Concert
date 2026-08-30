@@ -104,6 +104,9 @@ export default function AdminView({ showId, adminId }) {
   const [loading, setLoading] = useState(true);
   const [releasingId, setReleasingId] = useState(null);
   const [confirmingReleaseId, setConfirmingReleaseId] = useState(null);
+  const [confirmingReminders, setConfirmingReminders] = useState(false);
+  const [sendingReminders, setSendingReminders] = useState(false);
+  const [reminderProgress, setReminderProgress] = useState(null); // { sentSoFar, totalUserCount, remaining }
 
   async function fetchAllRows(query) {
     const pageSize = 1000;
@@ -140,6 +143,57 @@ export default function AdminView({ showId, adminId }) {
   }
 
   useEffect(() => { loadData(); }, [showId]);
+
+  async function handleSendReminders() {
+    setSendingReminders(true);
+    setConfirmingReminders(false);
+    let sentSoFar = 0;
+    let failedSoFar = 0;
+    let stoppedEarly = false;
+
+    while (true) {
+      const { data, error } = await supabase.functions.invoke('send-reminder-emails', {
+        body: { showId },
+      });
+
+      if (error || !data?.success) {
+        setSendingReminders(false);
+        showMessage(t('remindersFailed'));
+        return;
+      }
+
+      sentSoFar += data.sentCount;
+      failedSoFar += data.failedCount;
+      setReminderProgress({
+        sentSoFar,
+        failedSoFar,
+        totalUserCount: data.totalUserCount,
+        remaining: data.remaining,
+      });
+
+      if (data.remaining <= 0) break;
+
+      // If most of this batch failed, that's very likely Gmail's daily send
+      // cap (~500/day) kicking in, not a transient blip — grinding through
+      // the rest of the batches would just fail the same way. Stop here;
+      // anyone not yet sent stays untouched and can be retried tomorrow,
+      // since reminder_log only records actual successes.
+      if (data.sentCount === 0 && data.failedCount > 0) {
+        stoppedEarly = true;
+        break;
+      }
+
+      // Brief pause between batches so we're not hammering Gmail's SMTP
+      // connection back-to-back across many consecutive Edge Function calls.
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+
+    setSendingReminders(false);
+    showMessage(
+      stoppedEarly ? t('remindersRateLimited', sentSoFar) : t('remindersSent', sentSoFar, failedSoFar),
+      10000
+    );
+  }
 
   async function handleRelease(seatId) {
     setReleasingId(seatId);
@@ -198,6 +252,39 @@ export default function AdminView({ showId, adminId }) {
       <p className="admin-summary">
         {confirmedCount} {t('confirmedCount')} &middot; {lockedCount} {t('heldCount')} &middot; {total - confirmedCount - lockedCount} {t('availableCount')} &middot; {total} {t('totalCount')}
       </p>
+
+      <div style={{ marginBottom: 16 }}>
+        {!confirmingReminders && !sendingReminders && !reminderProgress ? (
+          <button className="btn" onClick={() => setConfirmingReminders(true)}>
+            {t('sendReminders')}
+          </button>
+        ) : confirmingReminders ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
+              {t('confirmReminders', confirmedCount)}
+            </span>
+            <button className="btn" onClick={() => setConfirmingReminders(false)}>
+              {t('cancel')}
+            </button>
+            <button className="btn btn-primary" onClick={handleSendReminders}>
+              {t('yesSendReminders')}
+            </button>
+          </div>
+        ) : (
+          <div>
+            <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 4 }}>
+              {sendingReminders
+                ? t('remindersInProgress', reminderProgress?.sentSoFar || 0, reminderProgress?.totalUserCount || 0)
+                : t('remindersDone', reminderProgress?.sentSoFar || 0, reminderProgress?.totalUserCount || 0)}
+            </p>
+            {!sendingReminders && (
+              <button className="btn" onClick={() => { setReminderProgress(null); }}>
+                {t('close')}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="admin-filters">
         <div className="field">

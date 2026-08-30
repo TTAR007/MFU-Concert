@@ -81,7 +81,7 @@ export const translations = {
 
     // My bookings
     yourSeats: 'Your seats',
-    tapTicketHint: 'Tap a ticket to show its QR code, or cancel it.',
+    tapTicketHint: 'Tap a ticket to show its QR code, download it, or cancel it.',
     noBookingsYetFull: 'No confirmed seats yet. Head to the Seat Map to grab one.',
     loadingBookings: 'Loading your bookings…',
     seat: 'Seat',
@@ -124,6 +124,16 @@ export const translations = {
     status: 'Status',
     viewSeatLocation: 'View seat location',
     hideSeatLocation: 'Hide seat location',
+    sendReminders: 'Send reminder emails',
+    confirmReminders: (n) => `Send a reminder email to everyone with a confirmed booking (${n} bookings)?`,
+    sendingReminders: 'Sending…',
+    yesSendReminders: 'Yes, send',
+    remindersSent: (sent, failed) => `Sent ${sent} reminder email(s).${failed > 0 ? ` ${failed} failed.` : ''}`,
+    remindersFailed: 'Could not send reminders. Please try again.',
+    remindersInProgress: (sent, total) => `Sending reminders… ${sent} of ${total} sent so far.`,
+    remindersDone: (sent, total) => `Done — sent to ${sent} of ${total} people.`,
+    remindersRateLimited: (sent) => `Sent ${sent} reminders, then stopped — this usually means today's email sending limit was reached. The rest haven't been sent yet; run this again tomorrow to continue with everyone remaining (nobody already sent will get a duplicate).`,
+    close: 'Close',
 
     // Check-in
     scanTicket: 'Scan Ticket',
@@ -217,7 +227,7 @@ export const translations = {
     seatExpiredReleased: 'ที่นั่งที่คุณจองไว้หนึ่งที่หมดเวลาแล้วและถูกปล่อยคืน',
 
     yourSeats: 'ที่นั่งของคุณ',
-    tapTicketHint: 'แตะตั๋วเพื่อแสดงรหัส QR Code หรือ ยกเลิกการจอง',
+    tapTicketHint: 'แตะตั๋วเพื่อแสดงรหัส QR ดาวน์โหลด หรือยกเลิกการจอง',
     noBookingsYetFull: 'ยังไม่มีที่นั่งที่ยืนยันแล้ว ไปที่ผังที่นั่งเพื่อจองที่นั่ง',
     loadingBookings: 'กำลังโหลดการจองของคุณ…',
     seat: 'ที่นั่ง',
@@ -259,6 +269,16 @@ export const translations = {
     status: 'สถานะ',
     viewSeatLocation: 'ดูตำแหน่งที่นั่ง',
     hideSeatLocation: 'ซ่อนตำแหน่งที่นั่ง',
+    sendReminders: 'ส่งอีเมลแจ้งเตือน',
+    confirmReminders: (n) => `ส่งอีเมลแจ้งเตือนให้ทุกคนที่มีการจองที่ยืนยันแล้ว (${n} การจอง)?`,
+    sendingReminders: 'กำลังส่ง…',
+    yesSendReminders: 'ใช่ ส่งเลย',
+    remindersSent: (sent, failed) => `ส่งอีเมลแจ้งเตือนแล้ว ${sent} ฉบับ${failed > 0 ? ` ล้มเหลว ${failed} ฉบับ` : ''}`,
+    remindersFailed: 'ไม่สามารถส่งอีเมลแจ้งเตือนได้ กรุณาลองใหม่อีกครั้ง',
+    remindersInProgress: (sent, total) => `กำลังส่งอีเมลแจ้งเตือน… ส่งแล้ว ${sent} จาก ${total}`,
+    remindersDone: (sent, total) => `เสร็จสิ้น — ส่งแล้ว ${sent} จาก ${total} คน`,
+    remindersRateLimited: (sent) => `ส่งไปแล้ว ${sent} ฉบับ แล้วหยุด — โดยปกติหมายความว่าถึงขีดจำกัดการส่งอีเมลของวันนี้แล้ว ที่เหลือยังไม่ได้ส่ง กรุณารันอีกครั้งพรุ่งนี้เพื่อส่งให้คนที่เหลือ (คนที่ส่งไปแล้วจะไม่ได้รับซ้ำ)`,
+    close: 'ปิด',
 
     scanTicket: 'สแกนตั๋ว',
     manualEntry: 'กรอกด้วยตนเอง',
